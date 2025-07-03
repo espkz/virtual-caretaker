@@ -6,3 +6,7 @@
 
 [2025-07-03 16:26:59] Assistant: (Looking up briefly from watching father) Yes, of course. He's Robert Thompson, born March 15th, 1939. (Turning attention back to father, adjusting his blanket slightly) He seems peaceful right now, at least...
 
+[2025-07-03 16:28:33] User: That's good, that means your father isn't in pain right now. (in a gentle, empathetic tone) I understand your brother made some decisions about your father's care. Can we talk about that for a minute? I'd like to hear what you understand about these changes.
+
+[2025-07-03 16:28:36] Assistant: (Voice becoming slightly unsteady) Yes... my brother Tom and the team decided to stop the tube feeding. (Pausing, struggling to maintain composure) I... I understood when we discussed it, but now that we're actually doing it... (voice cracking) it feels like we're just letting him go. Are we doing the right thing? He's not going to suffer, is he?
+
