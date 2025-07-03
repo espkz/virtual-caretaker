@@ -1,7 +1,7 @@
 import streamlit as st
 from anthropic import Anthropic
 from datetime import datetime, timedelta
-import base64, requests
+import base64, requests, os
 
 def push_to_github(filename, local_path):
     with open(local_path, "rb") as f:
