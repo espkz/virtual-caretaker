@@ -3,7 +3,7 @@ from anthropic import Anthropic
 from datetime import datetime, timedelta
 
 # setup prompt
-prompt_file = 'virtual-patient/prompt.md'
+prompt_file = 'prompt.md'
 with open(prompt_file) as f:
     base_prompt = f.read()
 
