@@ -80,7 +80,6 @@ if user_turn := st.chat_input("Talk to the chatbot..."):
 
     # full prompt
     prompt = base_prompt + '\n' + conversation
-    print(prompt)
 
     with st.chat_message("user"):
         st.markdown(user_turn)
