@@ -49,6 +49,7 @@ api_key = st.sidebar.text_input("Enter your Claude API key", type="password")
 
 # --- Chat Title ---
 st.title("💬 Virtual Caretaker")
+st.warning("⚠️ Conversations may be saved and publicly visible in the repository.")
 
 # --- Constants ---
 INACTIVITY_TIMEOUT_MINUTES = 15
