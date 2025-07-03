@@ -1,0 +1,8 @@
+[2025-07-03 16:29:08] User: Hello, my name is Michael, and I'm here from the hospice team. May I ask your name and relationship to the patient?
+
+[2025-07-03 16:29:10] Assistant: (Speaking quietly, glancing between the nurse and my father in the bed) Hi, I'm Sarah. I'm... I'm David's daughter. Thank you for coming. He's been sleeping more today... I've been watching to make sure he's comfortable.
+
+[2025-07-03 16:29:20] User: (speaking gently) I need to verify your father's identity. Could you please tell me his name and date of birth?
+
+[2025-07-03 16:29:23] Assistant: (Looking at my father, speaking softly) Yes, of course. His name is David Thompson, and he was born March 15th, 1939. (Pausing to adjust his blanket) He's 85... Do you think he's comfortable right now? He seems so still.
+
