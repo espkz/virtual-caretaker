@@ -1,7 +1,42 @@
 import streamlit as st
 from anthropic import Anthropic
 from datetime import datetime, timedelta
-import git, os
+import base64, requests
+
+def push_to_github(filename, local_path):
+    with open(local_path, "rb") as f:
+        content = f.read()
+    encoded = base64.b64encode(content).decode("utf-8")
+
+    repo = "espkz/virtual-caretaker"
+    path_in_repo = f"history/{filename}"
+    api_url = f"https://api.github.com/repos/{repo}/contents/{path_in_repo}"
+    token = st.secrets["github_token"]
+
+    # Check if the file already exists (to get the SHA for updates)
+    get_response = requests.get(api_url, headers={
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json"
+    })
+    sha = get_response.json().get("sha")
+
+    payload = {
+        "message": f"Save chat log {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "content": encoded,
+        "branch": "main",  # or 'master' depending on your repo
+    }
+    if sha:
+        payload["sha"] = sha
+
+    response = requests.put(api_url, json=payload, headers={
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json"
+    })
+
+    if response.status_code in [200, 201]:
+        st.success("Conversation pushed to GitHub")
+    else:
+        st.error(f"GitHub push failed: {response.json().get('message')}")
 
 # setup prompt and repository
 prompt_file = 'prompt.md'
@@ -107,12 +142,5 @@ st.markdown("---")
 col1, col2, col3 = st.columns([1, 1, 1])
 with col3:
     if st.button("💾 Save Conversation"):
-        try:
-            repo = git.Repo("/espkz/virtual-caretaker")
-            repo.git.add(st.session_state.log_filename)
-            repo.index.commit(f"Save chat log {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            origin = repo.remote(name="origin")
-            origin.push()
-            st.success("Conversation saved and pushed to GitHub ✅")
-        except Exception as e:
-            st.error(f"❌ Failed to push to Git: {e}")
+        filename = os.path.basename(st.session_state.log_filename)
+        push_to_github(filename, st.session_state.log_filename)
