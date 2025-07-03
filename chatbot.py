@@ -1,8 +1,9 @@
 import streamlit as st
 from anthropic import Anthropic
 from datetime import datetime, timedelta
+import git, os
 
-# setup prompt
+# setup prompt and repository
 prompt_file = 'prompt.md'
 with open(prompt_file) as f:
     base_prompt = f.read()
@@ -35,6 +36,7 @@ def reset_session_if_needed():
         st.session_state.messages = [{"role": "assistant", "content": "Welcome! Please type a greeting to begin speaking with the chatbot."}]
         st.session_state.session_start = now
         st.session_state.last_interaction = now
+        # reset
         st.session_state.log_filename = f"history/chat_{now.strftime('%Y-%m-%d_%H-%M-%S')}.txt"
 
 reset_session_if_needed()
@@ -100,3 +102,17 @@ if user_turn := st.chat_input("Talk to the chatbot..."):
                 placeholder.markdown(error_msg)
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
                 conversation = save_to_file("assistant", error_msg)
+# --- Save and Push to Git ---
+st.markdown("---")
+col1, col2, col3 = st.columns([1, 1, 1])
+with col3:
+    if st.button("💾 Save Conversation"):
+        try:
+            repo = git.Repo("/espkz/virtual-caretaker")
+            repo.git.add(st.session_state.log_filename)
+            repo.index.commit(f"Save chat log {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            origin = repo.remote(name="origin")
+            origin.push()
+            st.success("Conversation saved and pushed to GitHub ✅")
+        except Exception as e:
+            st.error(f"❌ Failed to push to Git: {e}")
