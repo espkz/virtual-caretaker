@@ -3,41 +3,6 @@ from anthropic import Anthropic
 from datetime import datetime, timedelta
 import base64, requests, os
 
-def push_to_github(filename, local_path):
-    with open(local_path, "rb") as f:
-        content = f.read()
-    encoded = base64.b64encode(content).decode("utf-8")
-
-    repo = "espkz/virtual-caretaker"
-    path_in_repo = f"history/{filename}"
-    api_url = f"https://api.github.com/repos/{repo}/contents/{path_in_repo}"
-    token = st.secrets["github_token"]
-
-    # Check if the file already exists (to get the SHA for updates)
-    get_response = requests.get(api_url, headers={
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json"
-    })
-    sha = get_response.json().get("sha")
-
-    payload = {
-        "message": f"Save chat log {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-        "content": encoded,
-        "branch": "main",  # or 'master' depending on your repo
-    }
-    if sha:
-        payload["sha"] = sha
-
-    response = requests.put(api_url, json=payload, headers={
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json"
-    })
-
-    if response.status_code in [200, 201]:
-        st.success("Conversation pushed to GitHub")
-    else:
-        st.error(f"GitHub push failed: {response.json().get('message')}")
-
 # setup prompt and repository
 prompt_file = 'prompt.md'
 with open(prompt_file) as f:
@@ -49,7 +14,6 @@ api_key = st.sidebar.text_input("Enter your Claude API key", type="password")
 
 # --- Chat Title ---
 st.title("💬 Virtual Caretaker")
-st.warning("⚠️ Conversations may be saved and publicly visible in the repository.")
 
 # --- Constants ---
 INACTIVITY_TIMEOUT_MINUTES = 15
@@ -63,7 +27,12 @@ if "last_interaction" not in st.session_state:
     st.session_state.last_interaction = datetime.now()
 if "log_filename" not in st.session_state:
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    st.session_state.log_filename = f"history/chat_{timestamp}.txt"
+    filename = f"history/chat_{timestamp}.txt"
+    st.session_state.log_filename = filename
+    # Ensure the file exists
+    os.makedirs("history", exist_ok=True)
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write("")  # create an empty file
 
 # --- Inactivity Check ---
 def reset_session_if_needed():
@@ -73,7 +42,8 @@ def reset_session_if_needed():
         st.session_state.session_start = now
         st.session_state.last_interaction = now
         # reset
-        st.session_state.log_filename = f"history/chat_{now.strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+        # /Users/espaek/PycharmProjects/choi/virtual-patient/history
+        st.session_state.log_filename = f"/Users/espaek/PycharmProjects/choi/virtual-patient/history/chat_{now.strftime('%Y-%m-%d_%H-%M-%S')}.txt"
 
 reset_session_if_needed()
 
@@ -138,10 +108,14 @@ if user_turn := st.chat_input("Talk to the chatbot..."):
                 placeholder.markdown(error_msg)
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
                 conversation = save_to_file("assistant", error_msg)
-# --- Save and Push to Git ---
+# --- Save and Download ---
 st.markdown("---")
-col1, col2, col3 = st.columns([1, 1, 1])
-with col3:
-    if st.button("💾 Save Conversation"):
-        filename = os.path.basename(st.session_state.log_filename)
-        push_to_github(filename, st.session_state.log_filename)
+with open(st.session_state.log_filename, "r", encoding="utf-8") as f:
+    file_contents = f.read()
+
+st.download_button(
+    label="💾 Download Conversation",
+    data=file_contents,
+    file_name=os.path.basename(st.session_state.log_filename),
+    mime="text/plain",
+)
