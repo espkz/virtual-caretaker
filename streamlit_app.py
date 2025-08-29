@@ -156,8 +156,7 @@ user_text = typed_input or voice_input
 # user input processing
 if user_text:
     st.session_state.last_interaction = datetime.now()
-
-    # Add user message immediately to history
+    
     st.session_state.messages.append({"role": "user", "content": user_text})
     save_to_file("user", user_text)
 
@@ -172,7 +171,6 @@ if user_text:
                 response = get_claude_response(api_key, full_prompt)
                 audio_bytes = text_to_speech_gtts(response)
 
-            # Add assistant response after spinner finishes
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": response,
