@@ -5,63 +5,74 @@ import os, io
 from anthropic import Anthropic
 from gtts import gTTS
 
-# setup prompt template and default
 prompt_template_file = 'prompts/prompt_template.md'
 default_role_file = 'prompts/default_role.md'
+
 with open(prompt_template_file) as f:
     prompt_template = f.read()
 with open(default_role_file) as f:
     default_role = f.read()
 
-# --- Constants ---
 INACTIVITY_TIMEOUT_MINUTES = 15
 
 st.set_page_config(page_title="Virtual Caretaker", layout="wide")
 
-st.markdown(
-    """
-    <style>
-    /* Make chat container wider */
-    .stChat {
-        max-width: 900px;
-        margin: auto;
-    }
+st.markdown("""
+<style>
+/* Chat container */
+#chat-container {
+    max-height: 70vh;
+    overflow-y: auto;
+    margin-bottom: 90px;
+}
 
-    /* Style chat bubbles */
-    .chat-message {
-        display: flex;
-        margin-bottom: 12px;
-    }
-    .chat-message.user {
-        justify-content: flex-end;
-    }
-    .chat-bubble {
-        max-width: 75%;
-        padding: 12px 16px;
-        border-radius: 12px;
-        margin: 4px;
-        font-size: 16px;
-        line-height: 1.5;
-    }
-    .chat-bubble.user {
-        background-color: #DCF8C6;
-        text-align: right;
-    }
-    .chat-bubble.assistant {
-        background-color: #E0E0E0;
-        text-align: left;
-    }
+/* Chat bubbles */
+.stChat .chat-message {
+    display: flex;
+    margin-bottom: 12px;
+}
+.stChat .chat-message.user {
+    justify-content: flex-end;
+}
+.stChat .chat-bubble {
+    max-width: 75%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    margin: 4px;
+    font-size: 16px;
+    line-height: 1.5;
+}
+.stChat .chat-bubble.user {
+    background-color: #DCF8C6;
+    text-align: right;
+}
+.stChat .chat-bubble.assistant {
+    background-color: #E0E0E0;
+    text-align: left;
+}
 
-    /* Add spacing below chat input */
-    .stChatInput {
-        margin-top: 10px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+/* Fixed input row */
+.chat-input-row {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background-color: white;
+    border-top: 1px solid #ccc;
+    padding: 8px 12px;
+    z-index: 100;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# --- Initialize Session State ---
+st.title("💬 Virtual Caretaker")
+
+# sidebar for prompt editing and API key
+with st.sidebar.expander("Settings", expanded=True):
+    api_key = st.text_input("Claude API key", type="password")
+    system_prompt = st.text_area("System prompt:", value=default_role, height=200)
+
+# initialize
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "Welcome! Type or speak to start chatting."}]
 if "session_start" not in st.session_state:
@@ -75,13 +86,7 @@ if "log_filename" not in st.session_state:
     with open(st.session_state.log_filename, "w", encoding="utf-8") as f:
         f.write("")
 
-# --- Sidebar ---
-with st.sidebar.expander("⚙️ Settings / Prompt Editor", expanded=True):
-    api_key = st.text_input("Claude API key", type="password")
-    system_prompt = st.text_area("System prompt:", value=default_role, height=200)
-
-
-# --- Inactivity Reset ---
+# inactivity check
 def reset_session_if_needed():
     now = datetime.now()
     if (now - st.session_state.last_interaction) > timedelta(minutes=INACTIVITY_TIMEOUT_MINUTES):
@@ -92,15 +97,14 @@ def reset_session_if_needed():
 
 reset_session_if_needed()
 
-# --- Save Conversation ---
+# save conversation
 def save_to_file(role, content):
     with open(st.session_state.log_filename, "a", encoding="utf-8") as f:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         f.write(f"[{ts}] {role.capitalize()}: {content.strip()}\n\n")
     return open(st.session_state.log_filename, "r", encoding="utf-8").read()
 
-
-# --- Claude Chat Function ---
+# claude response
 def get_claude_response(api_key, prompt):
     client = Anthropic(api_key=api_key)
     response = client.messages.create(
@@ -110,8 +114,6 @@ def get_claude_response(api_key, prompt):
     )
     return response.content[0].text if response.content else "⚠️ Claude returned an empty response."
 
-
-# --- TTS Function ---
 def text_to_speech_gtts(text: str):
     tts = gTTS(text=text, lang="en")
     audio_buffer = io.BytesIO()
@@ -119,70 +121,58 @@ def text_to_speech_gtts(text: str):
     audio_buffer.seek(0)
     return audio_buffer
 
+# chat history
+st.markdown('<div id="chat-container">', unsafe_allow_html=True)
 
-# --- Title ---
-st.title("💬 Virtual Caretaker")
-
-# --- Display Chat ---
 for i, msg in enumerate(st.session_state.messages):
     with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-        if msg.get("audio") and msg["role"] == "assistant" and i == len(st.session_state.messages) - 1:
+        if msg["role"] == "assistant" and msg.get("content") == "...":
+            st.markdown("...")  # thinking placeholder
+        else:
+            st.markdown(msg["content"])
+        if msg.get("audio") and msg["role"] == "assistant":
             st.audio(msg["audio"], format="audio/mp3", autoplay=True)
 
-# --- Bottom Input Row: Text + Voice ---
-col1, col2 = st.columns([8, 1])
+st.markdown('</div>', unsafe_allow_html=True)
 
+# chat input
+st.markdown('<div class="chat-input-row">', unsafe_allow_html=True)
+col1, col2 = st.columns([9, 1])
 with col1:
     typed_input = st.chat_input("Type your message here...")
-
 with col2:
-    # Center the mic button vertically
-    st.markdown(
-        """
-        <div style="display:flex; align-items:center; height:100%;">
-            <div id="mic-container"></div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
     voice_input = speech_to_text(
+        start_prompt="🎙️",
+        stop_prompt="⏹️",
         language='en',
         just_once=True,
         use_container_width=True,
         key='STT'
     )
-
+st.markdown('</div>', unsafe_allow_html=True)
 
 user_text = typed_input or voice_input
 
-# --- Handle User Input ---
+# user input processing
 if user_text:
     st.session_state.last_interaction = datetime.now()
 
-    # Append user message
+    # Add user message immediately to history
     st.session_state.messages.append({"role": "user", "content": user_text})
     save_to_file("user", user_text)
 
-    with st.chat_message("user"):
-        st.markdown(user_text)
-
-    # Get assistant response
     if not api_key:
-        st.error("Please enter your Claude API key in the sidebar.")
+        st.session_state.messages.append({"role": "assistant", "content": "⚠️ Please enter your Claude API key."})
     else:
         current_role = system_prompt if system_prompt.strip() else default_role
-
         full_prompt = prompt_template.format(role=current_role) + "\n" + save_to_file("user", user_text)
+
         try:
-            placeholder = st.empty()
-            placeholder.markdown("...")
-            response = get_claude_response(api_key, full_prompt)
+            with st.spinner("🤖 The AI is thinking..."):
+                response = get_claude_response(api_key, full_prompt)
+                audio_bytes = text_to_speech_gtts(response)
 
-            # Generate TTS
-            audio_bytes = text_to_speech_gtts(response)
-
-            # Append assistant message
+            # Add assistant response after spinner finishes
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": response,
@@ -190,15 +180,15 @@ if user_text:
             })
             save_to_file("assistant", response)
 
-            placeholder.markdown(response)
-            st.audio(audio_bytes, format="audio/mp3", autoplay=True)
         except Exception as e:
             error_msg = f"❌ Error: {e}"
             st.session_state.messages.append({"role": "assistant", "content": error_msg})
             save_to_file("assistant", error_msg)
-            placeholder.markdown(error_msg)
 
-# --- Download Conversation ---
+    st.rerun()
+
+
+# download
 st.markdown("---")
 with open(st.session_state.log_filename, "r", encoding="utf-8") as f:
     file_contents = f.read()
