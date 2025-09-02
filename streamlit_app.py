@@ -1,9 +1,9 @@
 import streamlit as st
 from streamlit_mic_recorder import speech_to_text
 from datetime import datetime, timedelta
-import os, io
+import os, io, re
 from anthropic import Anthropic
-from gtts import gTTS
+from openai import OpenAI
 
 prompt_template_file = 'prompts/prompt_template.md'
 default_role_file = 'prompts/default_role.md'
@@ -69,7 +69,8 @@ st.title("💬 Virtual Caretaker")
 
 # sidebar for prompt editing and API key
 with st.sidebar.expander("Settings", expanded=True):
-    api_key = st.text_input("Claude API key", type="password")
+    claude_api_key = st.text_input("Claude API key", type="password")
+    gpt_api_key = st.text_input("GPT API key", type="password")
     system_prompt = st.text_area("System prompt:", value=default_role, height=200)
 
 # initialize
@@ -114,12 +115,31 @@ def get_claude_response(api_key, prompt):
     )
     return response.content[0].text if response.content else "⚠️ Claude returned an empty response."
 
-def text_to_speech_gtts(text: str):
-    tts = gTTS(text=text, lang="en")
-    audio_buffer = io.BytesIO()
-    tts.write_to_fp(audio_buffer)
-    audio_buffer.seek(0)
-    return audio_buffer
+# def text_to_speech_gtts(text: str):
+#     tts = gTTS(text=text, lang="en")
+#     audio_buffer = io.BytesIO()
+#     tts.write_to_fp(audio_buffer)
+#     audio_buffer.seek(0)
+#     return audio_buffer
+
+def parse_response(text):
+    # match "anything" then "{...}" at the end
+    match = re.match(r"^(.*?)(\[.*\])?$", text.strip(), re.DOTALL)
+    if match:
+        dialogue = match.group(1).strip()
+        emotion = match.group(2).strip("[]") if match.group(2) else None
+        return dialogue, emotion
+    return text, None
+
+def text_to_speech_openai(dialogue: str, emotion_instructions : str, voice="coral", model="gpt-4o-mini-tts"):
+    tts_client = OpenAI(api_key=gpt_api_key)
+    response = tts_client.audio.speech.create(
+        model=model,
+        voice=voice,
+        input=dialogue,
+        instructions=emotion_instructions,
+    )
+    return response.read()
 
 # chat history
 st.markdown('<div id="chat-container">', unsafe_allow_html=True)
@@ -160,7 +180,7 @@ if user_text:
     st.session_state.messages.append({"role": "user", "content": user_text})
     save_to_file("user", user_text)
 
-    if not api_key:
+    if not claude_api_key:
         st.session_state.messages.append({"role": "assistant", "content": "⚠️ Please enter your Claude API key."})
     else:
         current_role = system_prompt if system_prompt.strip() else default_role
@@ -168,12 +188,13 @@ if user_text:
 
         try:
             with st.spinner("🤖 The AI is thinking..."):
-                response = get_claude_response(api_key, full_prompt)
-                audio_bytes = text_to_speech_gtts(response)
+                response = get_claude_response(claude_api_key, full_prompt)
+                dialogue, emotion = parse_response(response)
+                audio_bytes = text_to_speech_openai(dialogue, emotion)
 
             st.session_state.messages.append({
                 "role": "assistant",
-                "content": response,
+                "content": dialogue,
                 "audio": audio_bytes
             })
             save_to_file("assistant", response)
