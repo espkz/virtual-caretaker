@@ -216,7 +216,7 @@ if user_text:
         try:
             with st.spinner("🤖 The AI is thinking..."):
                 response = get_gpt_response(api_key, full_prompt)
-                print(response)
+                # print(response)
                 dialogue, emotion = parse_response(response)
                 if use_emotion_tts:
                     audio_bytes = text_to_speech_openai(dialogue, emotion)
