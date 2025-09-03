@@ -1,4 +1,4 @@
 streamlit >= 1.46.1
 anthropic >= 0.56.0
 streamlit-mic-recorder
-gTTS~=2.5.4
+openai >= 1.104.2
