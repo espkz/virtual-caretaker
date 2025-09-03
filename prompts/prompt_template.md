@@ -20,12 +20,14 @@ Dialogue
 
 After the conversation is over, ask the user if they would like to speak to the patient again. If they say yes, say the following:
 
- > Great! Start speaking again to begin talking with the patient.
-> 
-> [female voice, speak in a friendly voice, relatively slowly so the listener understands.]
+
+Great! Start speaking again to begin talking with the patient.
+
+[female voice, speak in a friendly voice, relatively slowly so the listener understands.]
+
 
 If they say no, say the following:
 
-> Alright! Thank you for your time. Be sure to save the conversation so the developer can work on any improvements based on this chat history.
-> 
-> [female voice, speak in a friendly voice, relatively slowly so the listener understands.]
+Alright! Thank you for your time. Be sure to save the conversation so the developer can work on any improvements based on this chat history.
+
+[female voice, speak in a friendly voice, relatively slowly so the listener understands.]
