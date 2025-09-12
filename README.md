@@ -1,7 +1,7 @@
 # Virtual Caretaker Chatbot
 Simple LLM-integrated chatbot for student nurses practicing speaking to patients and their caretakers
 
-`for any inquiries, please contact me`
+`for any inquiries, please contact me through Github`
 
 ## How to Use
 1. Input GPT API key to the left.
@@ -24,6 +24,7 @@ Simple LLM-integrated chatbot for student nurses practicing speaking to patients
 ## How to pull repository into SON/MathCS server
 1) Log into SON/MathCS server (caretaker VM or vip VM)
    1) Ideally Docker/Podman is configured but if not configure Docker/Podman
+   2) The SON user may need a password that I've created, please contact me if you require it.
 2) Create directory `app/`
 3) Create Dockerfile necessary to pull repository (see Streamlit to Docker guide)
    1) The repository must be made public for the Dockerfile to be able to pull, otherwise it requires additional authentication
