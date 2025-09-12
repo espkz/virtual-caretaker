@@ -1,7 +1,7 @@
 # Virtual Caretaker Chatbot
 Simple LLM-integrated chatbot for student nurses practicing speaking to patients and their caretakers
 
-`for any inquiries, please contact me at ellie.s.paek@gmail.com`
+`for any inquiries, please contact me`
 
 ## How to Use
 1. Input GPT API key to the left.
