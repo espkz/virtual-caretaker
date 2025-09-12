@@ -14,6 +14,12 @@ Dialogue
 
 [female/male voice, instructions for emotions]
 
+For example, a response to "Hello" would be:
+
+Hello... nice to meet you...
+
+[female voice, quiet, reserved, slightly shaky due to nervousness]
+
 {role}
 
 ## Post-Conversation Protocol

@@ -7,11 +7,14 @@ from gtts import gTTS
 
 prompt_template_file = 'prompts/prompt_template.md'
 default_role_file = 'prompts/default_role.md'
+instructions_file = 'instructions.txt'
 
 with open(prompt_template_file) as f:
     prompt_template = f.read()
 with open(default_role_file) as f:
     default_role = f.read()
+with open(instructions_file) as f:
+    instructions = f.read()
 
 INACTIVITY_TIMEOUT_MINUTES = 15
 
@@ -88,7 +91,8 @@ elif mode == "🎓 Student":
 
 # initialize
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Welcome! Type or speak to start chatting."}]
+    st.session_state.messages = [{"role": "assistant", "content": f'Welcome! {instructions}'},
+                                 {"role": "assistant", "content": "Type or speak to start chatting."}]
 if "session_start" not in st.session_state:
     st.session_state.session_start = datetime.now()
 if "last_interaction" not in st.session_state:
