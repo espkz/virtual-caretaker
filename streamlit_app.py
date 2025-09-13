@@ -7,14 +7,11 @@ from gtts import gTTS
 
 prompt_template_file = 'prompts/prompt_template.md'
 default_role_file = 'prompts/default_role.md'
-instructions_file = 'instructions.txt'
 
 with open(prompt_template_file) as f:
     prompt_template = f.read()
 with open(default_role_file) as f:
     default_role = f.read()
-with open(instructions_file) as f:
-    instructions = f.read()
 
 INACTIVITY_TIMEOUT_MINUTES = 15
 
