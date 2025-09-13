@@ -91,8 +91,7 @@ elif mode == "🎓 Student":
 
 # initialize
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": f'Welcome! {instructions}'},
-                                 {"role": "assistant", "content": "Type or speak to start chatting."}]
+    st.session_state.messages = [{"role": "assistant", "content": f'Welcome! Type or speak to start chatting.'}]
 if "session_start" not in st.session_state:
     st.session_state.session_start = datetime.now()
 if "last_interaction" not in st.session_state:
