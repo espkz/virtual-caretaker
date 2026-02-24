@@ -90,11 +90,11 @@ elif mode == "🎓 Student":
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": f'Welcome! Type or speak to start chatting.'}]
 if "session_start" not in st.session_state:
-    st.session_state.session_start = datetime.now()
+    st.session_state.session_start = datetime.now().astimezone()
 if "last_interaction" not in st.session_state:
-    st.session_state.last_interaction = datetime.now()
+    st.session_state.last_interaction = datetime.now().astimezone()
 if "log_filename" not in st.session_state:
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    timestamp = datetime.now().astimezone().strftime("%Y-%m-%d_%H-%M-%S")
     os.makedirs("history", exist_ok=True)
     st.session_state.log_filename = f"history/chat_{timestamp}.txt"
     with open(st.session_state.log_filename, "w", encoding="utf-8") as f:
@@ -102,7 +102,7 @@ if "log_filename" not in st.session_state:
 
 # inactivity check
 def reset_session_if_needed():
-    now = datetime.now()
+    now = datetime.now().astimezone()
     if (now - st.session_state.last_interaction) > timedelta(minutes=INACTIVITY_TIMEOUT_MINUTES):
         st.session_state.messages = [{"role": "assistant", "content": "Welcome! Type or speak to start chatting."}]
         st.session_state.session_start = now
@@ -114,7 +114,7 @@ reset_session_if_needed()
 # save conversation
 def save_to_file(role, content):
     with open(st.session_state.log_filename, "a", encoding="utf-8") as f:
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ts = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
         f.write(f"[{ts}] {role.capitalize()}: {content.strip()}\n\n")
 
 def read_log():
@@ -201,7 +201,7 @@ user_text = typed_input or voice_input
 
 # user input processing
 if user_text:
-    st.session_state.last_interaction = datetime.now()
+    st.session_state.last_interaction = datetime.now().astimezone()
     
     st.session_state.messages.append({"role": "user", "content": user_text})
     save_to_file("user", user_text)
