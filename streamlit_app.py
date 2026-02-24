@@ -71,19 +71,39 @@ st.title("💬 Virtual Caretaker")
 # SIDEBAR
 
 # student and instructor tabs (only changes settings)
-mode = st.sidebar.radio("Choose Mode", ["🎓 Student", "🧑‍🏫 Instructor"])
+# mode = st.sidebar.radio("Choose Mode", ["🎓 Student", "🧑‍🏫 Instructor"])
 
-if mode == "🧑‍🏫 Instructor":
-    st.sidebar.subheader("Settings")
-    api_key = st.sidebar.text_input("GPT API key", type="password")
-    system_prompt = st.sidebar.text_area("System prompt:", value=default_role, height=200)
-    use_emotion_tts = st.sidebar.toggle("🎭 Enable Emotion in Voice", value=True)
+# if mode == "🧑‍🏫 Instructor":
+#     st.sidebar.subheader("Settings")
+#     api_key = st.sidebar.text_input("GPT API key", type="password")
+#     system_prompt = st.sidebar.text_area("System prompt:", value=default_role, height=200)
+#     use_emotion_tts = st.sidebar.toggle("🎭 Enable Emotion in Voice", value=True)
 
-elif mode == "🎓 Student":
-    st.sidebar.subheader("Settings")
-    api_key = st.sidebar.text_input("GPT API key", type="password", key="student_api")
-    use_emotion_tts = st.sidebar.toggle("🎭 Enable Emotion in Voice", value=True, key="student_tts")
-    system_prompt = default_role
+# elif mode == "🎓 Student":
+# password for API key
+CORRECT_PASSWORD = "the_phantom_of_myself"
+
+st.sidebar.subheader("Settings")
+
+password = st.sidebar.text_input(
+    "Enter password to unlock API",
+    type="password",
+    key="password_input"
+)
+if password == CORRECT_PASSWORD:
+    st.session_state["authenticated"] = True
+else:
+    st.session_state["authenticated"] = False
+api_key = None
+if st.session_state.get("authenticated"):
+    with open("api_key.txt") as f:
+        api_key = f.read().strip()
+    st.sidebar.success("API accessed")
+else:
+    st.sidebar.warning("Enter password to access API")
+# emotion toggling
+use_emotion_tts = st.sidebar.toggle("🎭 Enable Emotion in Voice", value=True, key="student_tts")
+system_prompt = default_role
 
 
 # initialize
