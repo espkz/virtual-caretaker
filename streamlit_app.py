@@ -6,7 +6,7 @@ from openai import OpenAI
 from gtts import gTTS
 
 prompt_template_file = 'prompts/prompt_template.md'
-default_role_file = 'prompts/default_role.md'
+default_role_file = 'prompts/class_prompt.md'
 
 with open(prompt_template_file) as f:
     prompt_template = f.read()
