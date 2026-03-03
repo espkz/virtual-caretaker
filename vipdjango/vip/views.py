@@ -1,22 +1,29 @@
-from django.shortcuts import render, get_list_or_404
+from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import redirect
 from django.http import HttpResponse
-from django.template import loader
-from .models import Question
 
 
-def index(request):
-    latest_question_list = Question.objects.order_by("-pub_date")[:5]
-    context = {"latest_question_list": latest_question_list}
-    return render(request, "vip/index.html", context)
+@login_required
+def home(request):
+    if request.user.groups.filter(name="Professor").exists():
+        return redirect("vip:professor_dashboard")
+    elif request.user.groups.filter(name="Student").exists():
+        return redirect("vip:student_dashboard")
+    else:
+        return redirect("vip:dashboard")
 
-def detail(request, question_id):
-    question = get_object_or_404(Question, pk=question_id)
-    return render(request, "polls/detail.html", {"question": question})
+@login_required
+def professor_dashboard(request):
+    if not request.user.groups.filter(name="Professor").exists():
+        return redirect("home")
+    return render(request, "vip/professor_dashboard.html")
+@login_required
+def student_dashboard(request):
+    if not request.user.groups.filter(name="Student").exists():
+        return redirect("home")
+    return render(request, "vip/student_dashboard.html")
 
-def results(request, question_id):
-    response = "You're looking at the results of question %s."
-    return HttpResponse(response % question_id)
-
-
-def vote(request, question_id):
-    return HttpResponse("You're voting on question %s." % question_id)
+@login_required
+def dashboard(request):
+    return render(request, "vip/dashboard.html")
