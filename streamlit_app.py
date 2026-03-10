@@ -81,7 +81,7 @@ st.title("💬 Virtual Caretaker")
 
 # elif mode == "🎓 Student":
 # password for API key
-CORRECT_PASSWORD = "the_phantom_of_myself"
+CORRECT_PASSWORD = os.environ["PASSWORD"]
 
 st.sidebar.subheader("Settings")
 
@@ -96,8 +96,9 @@ else:
     st.session_state["authenticated"] = False
 api_key = None
 if st.session_state.get("authenticated"):
-    with open("api_key.txt") as f:
-        api_key = f.read().strip()
+    api_key = os.environ["OPENAI_API_KEY"]
+    # with open("api_key.txt") as f:
+    #     api_key = f.read().strip()
     st.sidebar.success("API accessed")
 else:
     st.sidebar.warning("Enter password to access API")
