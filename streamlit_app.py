@@ -46,7 +46,7 @@ st.markdown("""
     background-color: #DCF8C6;
     text-align: right;
 }
-.stChat .chat-bubble.assistant {
+.stChat .chat-bubble.ai {
     background-color: #E0E0E0;
     text-align: left;
 }
@@ -109,7 +109,7 @@ system_prompt = default_role
 
 # initialize
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": f'Welcome! Type or speak to start chatting.'}]
+    st.session_state.messages = [{"role": "ai", "content": f'Welcome! Type or speak to start chatting.'}]
 if "session_start" not in st.session_state:
     st.session_state.session_start = datetime.now().astimezone()
 if "last_interaction" not in st.session_state:
@@ -125,7 +125,7 @@ if "log_filename" not in st.session_state:
 def reset_session_if_needed():
     now = datetime.now().astimezone()
     if (now - st.session_state.last_interaction) > timedelta(minutes=INACTIVITY_TIMEOUT_MINUTES):
-        st.session_state.messages = [{"role": "assistant", "content": "Welcome! Type or speak to start chatting."}]
+        st.session_state.messages = [{"role": "ai", "content": "Welcome! Type or speak to start chatting."}]
         st.session_state.session_start = now
         st.session_state.last_interaction = now
         st.session_state.log_filename = f"history/chat_{now.strftime('%Y-%m-%d_%H-%M-%S')}.txt"
@@ -136,7 +136,7 @@ reset_session_if_needed()
 def save_to_file(role, content):
     with open(st.session_state.log_filename, "a", encoding="utf-8") as f:
         ts = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
-        f.write(f"[{ts}] {role.capitalize()}: {content.strip()}\n\n")
+        f.write(f"[{ts}] {role}: {content.strip()}\n\n")
 
 def read_log():
     with open(st.session_state.log_filename, "r", encoding="utf-8") as f:
@@ -193,11 +193,11 @@ st.markdown('<div id="chat-container">', unsafe_allow_html=True)
 
 for i, msg in enumerate(st.session_state.messages):
     with st.chat_message(msg["role"]):
-        if msg["role"] == "assistant" and msg.get("content") == "...":
+        if msg["role"] == "ai" and msg.get("content") == "...":
             st.markdown("...")  # thinking placeholder
         else:
             st.markdown(msg["content"])
-        if msg.get("audio") and msg["role"] == "assistant":
+        if msg.get("audio") and msg["role"] == "ai":
             st.audio(msg["audio"], format="audio/mp3", autoplay=True)
 
 st.markdown('</div>', unsafe_allow_html=True)
@@ -228,7 +228,7 @@ if user_text:
     save_to_file("user", user_text)
 
     if not api_key:
-        st.session_state.messages.append({"role": "assistant", "content": "⚠️ Please enter your GPT API key."})
+        st.session_state.messages.append({"role": "ai", "content": "⚠️ Please enter your GPT API key."})
     else:
         current_role = system_prompt if system_prompt.strip() else default_role
         conversation_history = read_log()
@@ -246,16 +246,16 @@ if user_text:
                     audio_bytes = text_to_speech_gtts(dialogue)
 
             st.session_state.messages.append({
-                "role": "assistant",
+                "role": "ai",
                 "content": dialogue,
                 "audio": audio_bytes
             })
-            save_to_file("assistant", response)
+            save_to_file("AI", response)
 
         except Exception as e:
             error_msg = f"❌ Error: {e}"
-            st.session_state.messages.append({"role": "assistant", "content": error_msg})
-            save_to_file("assistant", error_msg)
+            st.session_state.messages.append({"role": "ai", "content": error_msg})
+            save_to_file("AI", error_msg)
 
     st.rerun()
 

@@ -24,16 +24,8 @@ Hello... nice to meet you...
 
 ## Post-Conversation Protocol
 
-After the conversation is over, ask the user if they would like to speak to the patient again. If they say yes, say the following:
+After the conversation is over, say the following:
 
+Thank you for engaging with virtual conversation simulation. Please remember to download your conversation record using the ‘Download Conversation’ button for your reference.
 
-Great! Start speaking again to begin talking with the patient.
-
-[female voice, speak in a friendly voice, relatively slowly so the listener understands.]
-
-
-If they say no, say the following:
-
-Alright! Thank you for your time. Be sure to save the conversation so the developer can work on any improvements based on this chat history.
-
-[female voice, speak in a friendly voice, relatively slowly so the listener understands.]
+[male voice, speak in a friendly voice, relatively slowly so the listener understands.]
