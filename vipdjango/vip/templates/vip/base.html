@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Virtual Caretaker{% endblock %}</title>
+    <style>
+        :root {
+            --text: #1f2937;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --border: #d1d5db;
+            --muted: #6b7280;
+            --table-header: #f1f5f9;
+            --table-row: #f8fafc;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 24px;
+            font-family: Arial, sans-serif;
+            color: var(--text);
+            background: var(--bg);
+            line-height: 1.4;
+        }
+
+        .page {
+            width: 100%;
+            max-width: 980px;
+            margin: 0 auto;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        h1 {
+            margin: 0 0 8px 0;
+        }
+
+        h2 {
+            margin: 24px 0 12px 0;
+        }
+
+        p {
+            margin: 0 0 18px 0;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .content-card {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+            background: var(--table-row);
+            margin-bottom: 18px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 24px;
+        }
+
+        th, td {
+            border: 1px solid var(--border);
+            padding: 12px 14px;
+            text-align: left;
+            vertical-align: middle;
+        }
+
+        th {
+            background: var(--table-header);
+        }
+
+        tbody tr:nth-child(even) {
+            background: var(--table-row);
+        }
+
+        form {
+            margin: 0;
+        }
+
+        .logout-form {
+            margin-top: 12px;
+        }
+
+        button {
+            padding: 8px 12px;
+            border: 1px solid #9ca3af;
+            border-radius: 8px;
+            background: #f9fafb;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #f3f4f6;
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

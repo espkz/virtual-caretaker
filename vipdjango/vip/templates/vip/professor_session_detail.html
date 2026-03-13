@@ -1,0 +1,80 @@
+{% extends "vip/base.html" %}
+{% block title %}Session {{ session.id }}{% endblock %}
+{% block content %}
+<style>
+    .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 10px;
+        margin-bottom: 16px;
+    }
+
+    .meta-item {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px;
+        background: #f8fafc;
+    }
+
+    .chat-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+    .message {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 12px;
+        background: #ffffff;
+    }
+
+    .message.student {
+        border-left: 4px solid #2563eb;
+        background: #eff6ff;
+    }
+
+    .message.assistant {
+        border-left: 4px solid #059669;
+        background: #ecfdf5;
+    }
+
+    .message-meta {
+        font-size: 0.9rem;
+        color: var(--muted);
+        margin-bottom: 6px;
+    }
+
+    .message-content {
+        white-space: pre-wrap;
+    }
+</style>
+
+<h1>Session #{{ session.id }}</h1>
+<p class="muted">Review chat history between student and chatbot.</p>
+
+<div class="meta-grid">
+    <div class="meta-item"><strong>Student:</strong> {{ session.student.username }}</div>
+    <div class="meta-item"><strong>Prompt:</strong> {% if session.role_prompt %}{{ session.role_prompt.title }}{% else %}None{% endif %}</div>
+    <div class="meta-item"><strong>Started:</strong> {{ session.started_at }}</div>
+    <div class="meta-item"><strong>Ended:</strong> {% if session.ended_at %}{{ session.ended_at }}{% else %}In progress{% endif %}</div>
+</div>
+
+{% if messages %}
+<div class="chat-list">
+    {% for message in messages %}
+    <article class="message {{ message.sender }}">
+        <div class="message-meta">
+            {{ message.get_sender_display }} | {{ message.created_at }}
+        </div>
+        <div class="message-content">{{ message.content }}</div>
+    </article>
+    {% endfor %}
+</div>
+{% else %}
+<p>No messages were saved for this session.</p>
+{% endif %}
+
+<p><a href="{% url 'vip:professor_dashboard' %}?tab=logs">Back to Student Logs</a></p>
+{% endblock %}

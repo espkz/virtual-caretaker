@@ -1,0 +1,168 @@
+{% extends "vip/base.html" %}
+{% block title %}{{ page_title }}{% endblock %}
+{% block content %}
+<h1>{{ page_title }}</h1>
+
+<style>
+    .prompt-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        align-items: start;
+    }
+
+    .panel {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 14px;
+        background: var(--surface);
+    }
+
+    .panel h2 {
+        margin-top: 0;
+    }
+
+    .field {
+        margin-bottom: 12px;
+    }
+
+    .field label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 6px;
+    }
+
+    .field input[type="text"],
+    .field textarea {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 10px;
+        font: inherit;
+    }
+
+    .field textarea {
+        min-height: 420px;
+        resize: vertical;
+    }
+
+    .errors {
+        color: #b91c1c;
+        margin-bottom: 10px;
+    }
+
+    .preview-content {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        min-height: 200px;
+        background: #fbfdff;
+        overflow-x: auto;
+    }
+
+    .preview-content pre {
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 10px;
+        border-radius: 6px;
+        overflow-x: auto;
+    }
+
+    .preview-content code {
+        background: #f1f5f9;
+        padding: 1px 4px;
+        border-radius: 4px;
+    }
+
+    .preview-note {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 0.9rem;
+    }
+
+    @media (max-width: 900px) {
+        .prompt-layout {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="prompt-layout">
+    <section class="panel">
+        <h2>Prompt Editor</h2>
+        <form method="post">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="errors">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="field">
+                <label for="{{ form.title.id_for_label }}">Title</label>
+                {{ form.title }}
+                {% if form.title.errors %}
+                <div class="errors">{{ form.title.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="field">
+                <label for="{{ form.content.id_for_label }}">Content (Markdown)</label>
+                {{ form.content }}
+                {% if form.content.errors %}
+                <div class="errors">{{ form.content.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="field">
+                <label for="{{ form.is_active.id_for_label }}">
+                    {{ form.is_active }} Active
+                </label>
+                {% if form.is_active.errors %}
+                <div class="errors">{{ form.is_active.errors }}</div>
+                {% endif %}
+            </div>
+
+            <button type="submit">Save Prompt</button>
+        </form>
+    </section>
+
+    <section class="panel">
+        <h2>Live Preview</h2>
+        <div id="md-preview" class="preview-content"></div>
+        <p class="preview-note">Preview updates as you type.</p>
+    </section>
+</div>
+
+<p class="muted" style="margin-top: 12px;">
+    <a href="{% url 'vip:professor_dashboard' %}">Back to Professor Dashboard</a>
+</p>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+    const textarea = document.getElementById("id_content");
+    const preview = document.getElementById("md-preview");
+
+    function escapeHtml(text) {
+        return text
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;");
+    }
+
+    function renderPreview() {
+        const source = textarea ? textarea.value : "";
+        if (window.marked && typeof window.marked.parse === "function") {
+            preview.innerHTML = window.marked.parse(source);
+        } else {
+            preview.innerHTML = "<pre>" + escapeHtml(source) + "</pre>";
+        }
+    }
+
+    if (textarea) {
+        textarea.addEventListener("input", renderPreview);
+        renderPreview();
+    }
+</script>
+{% endblock %}

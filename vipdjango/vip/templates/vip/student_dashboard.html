@@ -1,6 +1,17 @@
+{% extends "vip/base.html" %}
+{% block title %}Student Dashboard{% endblock %}
+{% block content %}
+
 <h1>Student Dashboard</h1>
 <p>Welcome {{ request.user.username }}</p>
-<form method="post" action="{% url 'logout' %}">
+
+<div class="content-card">
+    <strong>Chat access is ready.</strong>
+    <p>You can start a conversation once the student chat page is connected.</p>
+</div>
+
+<form method="post" action="{% url 'logout' %}" class="logout-form">
     {% csrf_token %}
     <button type="submit">Logout</button>
 </form>
+{% endblock %}

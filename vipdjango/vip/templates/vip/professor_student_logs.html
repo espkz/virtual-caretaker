@@ -1,0 +1,37 @@
+{% extends "vip/base.html" %}
+{% block title %}{{ student.username }} Logs{% endblock %}
+{% block content %}
+<h1>{{ student.username }} - Chat Logs</h1>
+<p class="muted">All sessions for this student.</p>
+
+{% if sessions %}
+<table>
+    <thead>
+        <tr>
+            <th>Session</th>
+            <th>Prompt</th>
+            <th>Started</th>
+            <th>Ended</th>
+            <th>Messages</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for session in sessions %}
+        <tr>
+            <td>#{{ session.id }}</td>
+            <td>{% if session.role_prompt %}{{ session.role_prompt.title }}{% else %}None{% endif %}</td>
+            <td>{{ session.started_at }}</td>
+            <td>{% if session.ended_at %}{{ session.ended_at }}{% else %}In progress{% endif %}</td>
+            <td>{{ session.messages.count }}</td>
+            <td><a href="{% url 'vip:professor_session_detail' session.id %}">Open Chat</a></td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No chat sessions yet for this student.</p>
+{% endif %}
+
+<p><a href="{% url 'vip:professor_dashboard' %}?tab=logs">Back to Student List</a></p>
+{% endblock %}

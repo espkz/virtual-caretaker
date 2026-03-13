@@ -1,6 +1,10 @@
+{% extends "vip/base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
 <h1>Dashboard</h1>
 <p>Welcome {{ request.user.username }}. You are not assigned to a group, please wait.</p>
 <form method="post" action="{% url 'logout' %}">
     {% csrf_token %}
     <button type="submit">Logout</button>
 </form>
+{% endblock %}

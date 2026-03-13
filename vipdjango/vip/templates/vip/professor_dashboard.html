@@ -1,6 +1,118 @@
+{% extends "vip/base.html" %}
+{% block title %}Professor Dashboard{% endblock %}
+{% block content %}
+
+<style>
+    .tabs {
+        display: flex;
+        gap: 8px;
+        margin: 10px 0 18px 0;
+    }
+
+    .tab-link {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 10px;
+        text-decoration: none;
+        color: var(--text);
+        background: #f8fafc;
+    }
+
+    .tab-link.active {
+        background: #e2e8f0;
+        font-weight: 600;
+    }
+</style>
+
 <h1>Professor Dashboard</h1>
 <p>Welcome {{ request.user.username }}</p>
-<form method="post" action="{% url 'logout' %}">
+
+<nav class="tabs">
+    <a class="tab-link {% if current_tab == 'prompts' %}active{% endif %}" href="{% url 'vip:professor_dashboard' %}?tab=prompts">Prompts</a>
+    <a class="tab-link {% if current_tab == 'logs' %}active{% endif %}" href="{% url 'vip:professor_dashboard' %}?tab=logs">Student Logs</a>
+</nav>
+
+{% if current_tab == "prompts" %}
+<h2>Role Prompts</h2>
+{% if prompts %}
+<table>
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Status</th>
+            <th>Last Updated</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for prompt in prompts %}
+        <tr>
+            <td>{{ prompt.title }}</td>
+            <td>
+                {% if prompt.is_active %}
+                    Active
+                {% else %}
+                    Inactive
+                {% endif %}
+            </td>
+            <td>{{ prompt.updated_at }}</td>
+            <td>
+                <a href="{% url 'vip:edit_prompt' prompt.id %}">Edit</a>
+                <br>
+                {% if prompt.is_active %}
+                    <form method="post" action="{% url 'vip:deactivate_prompt' prompt.id %}">
+                        {% csrf_token %}
+                        <button type="submit">Deactivate</button>
+                    </form>
+                {% else %}
+                    <form method="post" action="{% url 'vip:set_active_prompt' prompt.id %}">
+                        {% csrf_token %}
+                        <button type="submit">Activate</button>
+                    </form>
+                {% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No prompts yet.</p>
+{% endif %}
+
+<p><a href="{% url 'vip:create_prompt' %}">Add New Prompt</a></p>
+{% endif %}
+
+{% if current_tab == "logs" %}
+<h2>Student Chat Logs</h2>
+{% if students %}
+<table>
+    <thead>
+        <tr>
+            <th>Student</th>
+            <th>Total Sessions</th>
+            <th>Last Session</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for student in students %}
+        <tr>
+            <td>{{ student.username }}</td>
+            <td>{{ student.session_count }}</td>
+            <td>{% if student.last_session_at %}{{ student.last_session_at }}{% else %}No sessions yet{% endif %}</td>
+            <td><a href="{% url 'vip:professor_student_logs' student.id %}">View Logs</a></td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No student users found in the Student group.</p>
+{% endif %}
+{% endif %}
+
+
+<form method="post" action="{% url 'logout' %}" class="logout-form">
     {% csrf_token %}
     <button type="submit">Logout</button>
 </form>
+{% endblock %}
