@@ -84,6 +84,12 @@
 
 {% if current_tab == "logs" %}
 <h2>Student Chat Logs</h2>
+<form method="post" action="{% url 'vip:professor_reset_all_student_logs' %}" style="margin-bottom: 12px;">
+    {% csrf_token %}
+    <button type="submit" onclick="return confirm('Reset all student chat logs? This deletes every saved student session.');">
+        Reset All Student Logs
+    </button>
+</form>
 {% if students %}
 <table>
     <thead>

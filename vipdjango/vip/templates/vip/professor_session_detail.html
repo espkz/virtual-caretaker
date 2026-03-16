@@ -53,6 +53,11 @@
 
 <h1>Session #{{ session.id }}</h1>
 <p class="muted">Review chat history between student and chatbot.</p>
+<form method="post" action="{% url 'vip:professor_delete_session' session.id %}" style="margin-bottom: 12px;">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{% url 'vip:professor_student_logs' session.student.id %}">
+    <button type="submit" onclick="return confirm('Delete this session log?');">Delete This Session</button>
+</form>
 
 <div class="meta-grid">
     <div class="meta-item"><strong>Student:</strong> {{ session.student.username }}</div>

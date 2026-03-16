@@ -3,6 +3,10 @@
 {% block content %}
 <h1>{{ student.username }} - Chat Logs</h1>
 <p class="muted">All sessions for this student.</p>
+<form method="post" action="{% url 'vip:professor_delete_student_logs' student.id %}" style="margin-bottom: 12px;">
+    {% csrf_token %}
+    <button type="submit" onclick="return confirm('Delete all logs for this student?');">Delete All Logs For This Student</button>
+</form>
 
 {% if sessions %}
 <table>
@@ -13,7 +17,7 @@
             <th>Started</th>
             <th>Ended</th>
             <th>Messages</th>
-            <th>Action</th>
+            <th>Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -24,7 +28,14 @@
             <td>{{ session.started_at }}</td>
             <td>{% if session.ended_at %}{{ session.ended_at }}{% else %}In progress{% endif %}</td>
             <td>{{ session.messages.count }}</td>
-            <td><a href="{% url 'vip:professor_session_detail' session.id %}">Open Chat</a></td>
+            <td>
+                <a href="{% url 'vip:professor_session_detail' session.id %}">Open Chat</a>
+                <form method="post" action="{% url 'vip:professor_delete_session' session.id %}" style="margin-top: 6px;">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{% url 'vip:professor_student_logs' student.id %}">
+                    <button type="submit" onclick="return confirm('Delete this session log?');">Delete</button>
+                </form>
+            </td>
         </tr>
     {% endfor %}
     </tbody>
