@@ -1,6 +1,7 @@
 import os
 import re
 import io
+import csv
 from pathlib import Path
 
 from django.conf import settings
@@ -8,13 +9,14 @@ from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, render
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.db.models import Count, Max
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .forms import RolePromptForm
+from .forms import ClassGroupCreateForm, RolePromptForm, StudentAccountCreateForm, StudentBulkUploadForm
 from .models import ChatMessage, ChatSession, RolePrompt
 
 """
@@ -76,6 +78,100 @@ def _generate_assistant_response(role_text, session_messages):
         return f"Assistant error: {exc}"
 
 
+def _clean_name_part(value):
+    return re.sub(r"[^a-zA-Z0-9]", "", value or "").lower()
+
+
+def _build_student_username(first_name, last_name):
+    first = _clean_name_part(first_name)
+    last = _clean_name_part(last_name)
+    if not first and not last:
+        return "student"
+    if first and last:
+        return f"{first}.{last}"
+    return first or last
+
+
+def _build_student_password(first_name, last_name, student_id):
+    return f"{_clean_name_part(first_name)}{_clean_name_part(last_name)}{student_id}"
+
+
+def _normalize_class_name(value):
+    return re.sub(r"\s+", " ", (value or "").strip())
+
+
+def _normalize_header(header):
+    return re.sub(r"[^a-z0-9]", "", (header or "").strip().lower())
+
+
+def _extract_row_value(row, aliases):
+    normalized = {_normalize_header(k): v for k, v in row.items()}
+    for alias in aliases:
+        value = normalized.get(alias)
+        if value is not None and str(value).strip() != "":
+            return str(value).strip()
+    return ""
+
+
+def _read_bulk_rows(uploaded_file):
+    suffix = Path(uploaded_file.name).suffix.lower()
+    if suffix == ".csv":
+        decoded = uploaded_file.read().decode("utf-8-sig")
+        return list(csv.DictReader(io.StringIO(decoded)))
+
+    if suffix == ".xlsx":
+        try:
+            import openpyxl
+        except ImportError as exc:
+            raise ValueError("openpyxl is required to read .xlsx files.") from exc
+
+        wb = openpyxl.load_workbook(uploaded_file, data_only=True)
+        ws = wb.active
+        headers = [str(cell.value).strip() if cell.value is not None else "" for cell in ws[1]]
+        rows = []
+        for values in ws.iter_rows(min_row=2, values_only=True):
+            if all(v is None or str(v).strip() == "" for v in values):
+                continue
+            rows.append(
+                {
+                    headers[i]: ("" if values[i] is None else str(values[i]).strip())
+                    for i in range(len(headers))
+                }
+            )
+        return rows
+
+    raise ValueError("Unsupported file type. Please upload .xlsx or .csv.")
+
+
+def _create_student_account(first_name, last_name, student_id, class_name):
+    User = get_user_model()
+    username = _build_student_username(first_name, last_name)
+    password = _build_student_password(first_name, last_name, student_id)
+    normalized_class = _normalize_class_name(class_name)
+
+    if User.objects.filter(username=username).exists():
+        return None, f'Username "{username}" already exists.'
+
+    user = User.objects.create_user(
+        username=username,
+        password=password,
+        first_name=first_name.strip(),
+        last_name=last_name.strip(),
+    )
+
+    student_group, _ = Group.objects.get_or_create(name="Student")
+    class_group, _ = Group.objects.get_or_create(name=f"Class: {normalized_class}")
+    user.groups.add(student_group, class_group)
+    return {
+        "username": username,
+        "password": password,
+        "first_name": first_name.strip(),
+        "last_name": last_name.strip(),
+        "student_id": student_id.strip(),
+        "class_name": normalized_class,
+    }, None
+
+
 @login_required
 def home(request):
     if request.user.groups.filter(name="Professor").exists():
@@ -105,21 +201,177 @@ def professor_dashboard(request):
     User = get_user_model()
     students = (
         User.objects.filter(groups__name="Student")
+        .prefetch_related("groups")
         .annotate(
             session_count=Count("chat_sessions", distinct=True),
             last_session_at=Max("chat_sessions__started_at"),
         )
         .order_by("username")
     )
+    students_by_class = {}
+    for student in students:
+        class_names = []
+        for group in student.groups.all():
+            if group.name.startswith("Class: "):
+                class_names.append(group.name.replace("Class: ", "", 1))
+        if not class_names:
+            class_names = ["Unassigned"]
+        for class_name in class_names:
+            students_by_class.setdefault(class_name, []).append(student)
+    students_by_class = [
+        {"class_name": class_name, "students": students_by_class[class_name]}
+        for class_name in sorted(students_by_class.keys())
+    ]
     return render(
         request,
         "vip/professor_dashboard.html",
         {
             "prompts": prompts,
-            "students": students,
+            "students_by_class": students_by_class,
             "current_tab": current_tab,
         },
     )
+
+
+@login_required
+def professor_manage_accounts(request):
+    if not request.user.groups.filter(name="Professor").exists():
+        return redirect("vip:home")
+
+    single_form = StudentAccountCreateForm()
+    bulk_form = StudentBulkUploadForm()
+    class_form = ClassGroupCreateForm()
+    created_accounts = []
+    skipped_rows = []
+    info_message = ""
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        if action == "create_single":
+            single_form = StudentAccountCreateForm(request.POST)
+            if single_form.is_valid():
+                account, error = _create_student_account(
+                    first_name=single_form.cleaned_data["first_name"],
+                    last_name=single_form.cleaned_data["last_name"],
+                    student_id=single_form.cleaned_data["student_id"],
+                    class_name=single_form.cleaned_data["class_name"],
+                )
+                if error:
+                    skipped_rows.append({"row": "Single form", "reason": error})
+                else:
+                    created_accounts.append(account)
+                    info_message = "Student account created."
+
+        if action == "bulk_upload":
+            bulk_form = StudentBulkUploadForm(request.POST, request.FILES)
+            if bulk_form.is_valid():
+                aliases = {
+                    "first_name": ["firstname", "first", "givenname"],
+                    "last_name": ["lastname", "last", "surname", "familyname"],
+                    "student_id": ["studentid", "id", "studentnumber", "sid"],
+                    "class_name": ["classname", "class", "course", "section", "group"],
+                }
+                try:
+                    rows = _read_bulk_rows(bulk_form.cleaned_data["file"])
+                except ValueError as exc:
+                    skipped_rows.append({"row": "Upload", "reason": str(exc)})
+                    rows = []
+
+                for idx, row in enumerate(rows, start=2):
+                    first_name = _extract_row_value(row, aliases["first_name"])
+                    last_name = _extract_row_value(row, aliases["last_name"])
+                    student_id = _extract_row_value(row, aliases["student_id"])
+                    class_name = _extract_row_value(row, aliases["class_name"])
+                    if re.match(r"^\d+\.0$", student_id):
+                        student_id = student_id[:-2]
+
+                    if not first_name or not last_name or not student_id or not class_name:
+                        skipped_rows.append(
+                            {"row": idx, "reason": "Missing required fields (first_name, last_name, student_id, class_name)."}
+                        )
+                        continue
+                    if not student_id.isdigit():
+                        skipped_rows.append({"row": idx, "reason": "student_id must be numeric."})
+                        continue
+
+                    account, error = _create_student_account(
+                        first_name=first_name,
+                        last_name=last_name,
+                        student_id=student_id,
+                        class_name=class_name,
+                    )
+                    if error:
+                        skipped_rows.append({"row": idx, "reason": error})
+                    else:
+                        created_accounts.append(account)
+
+                info_message = f"Bulk upload complete. Created {len(created_accounts)} account(s)."
+
+        if action == "create_class":
+            class_form = ClassGroupCreateForm(request.POST)
+            if class_form.is_valid():
+                normalized_class = _normalize_class_name(class_form.cleaned_data["class_name"])
+                Group.objects.get_or_create(name=f"Class: {normalized_class}")
+                info_message = f'Class group "{normalized_class}" is ready.'
+
+        if action == "move_student":
+            student_id = request.POST.get("student_id", "").strip()
+            class_name = _normalize_class_name(request.POST.get("class_name", ""))
+            User = get_user_model()
+            student = get_object_or_404(User, pk=student_id, groups__name="Student")
+            if class_name:
+                class_group, _ = Group.objects.get_or_create(name=f"Class: {class_name}")
+                existing_class_groups = student.groups.filter(name__startswith="Class: ")
+                student.groups.remove(*existing_class_groups)
+                student.groups.add(class_group)
+                info_message = f"Moved {student.username} to class {class_name}."
+            else:
+                skipped_rows.append({"row": "Move student", "reason": "Class name cannot be empty."})
+
+        if action == "delete_student":
+            student_id = request.POST.get("student_id", "").strip()
+            User = get_user_model()
+            student = get_object_or_404(User, pk=student_id, groups__name="Student")
+            username = student.username
+            student.delete()
+            info_message = f"Deleted student account {username}."
+
+    class_groups = Group.objects.filter(name__startswith="Class: ").order_by("name")
+    User = get_user_model()
+    roster_students = User.objects.filter(groups__name="Student").prefetch_related("groups").order_by("username")
+    student_rows = []
+    for student in roster_students:
+        class_names = [
+            group.name.replace("Class: ", "", 1)
+            for group in student.groups.all()
+            if group.name.startswith("Class: ")
+        ]
+        student_rows.append(
+            {
+                "id": student.id,
+                "username": student.username,
+                "first_name": student.first_name,
+                "last_name": student.last_name,
+                "classes_display": ", ".join(class_names) if class_names else "Unassigned",
+            }
+        )
+
+    return render(
+        request,
+        "vip/professor_accounts.html",
+        {
+            "single_form": single_form,
+            "bulk_form": bulk_form,
+            "class_form": class_form,
+            "created_accounts": created_accounts,
+            "skipped_rows": skipped_rows,
+            "info_message": info_message,
+            "class_groups": class_groups,
+            "student_rows": student_rows,
+        },
+    )
+
 
 @login_required
 def create_prompt(request):

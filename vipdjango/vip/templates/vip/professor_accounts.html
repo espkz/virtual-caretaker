@@ -1,0 +1,143 @@
+{% extends "vip/base.html" %}
+{% block title %}Student Accounts{% endblock %}
+{% block content %}
+<h1>Student Accounts</h1>
+<p class="muted">Create one account at a time or upload a spreadsheet to create many students at once.</p>
+
+<p><a href="{% url 'vip:professor_dashboard' %}">Back to Professor Dashboard</a></p>
+
+{% if info_message %}
+<div class="content-card">
+    <strong>{{ info_message }}</strong>
+</div>
+{% endif %}
+
+<h2>Create Single Student</h2>
+<form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="create_single">
+    {{ single_form.as_p }}
+    <button type="submit">Create Student Account</button>
+</form>
+
+<h2>Create Class Group</h2>
+<form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="create_class">
+    {{ class_form.as_p }}
+    <button type="submit">Create Class Group</button>
+</form>
+
+<h2>Bulk Upload</h2>
+<p class="muted">Accepted file types: <code>.xlsx</code> and <code>.csv</code>. Required columns: <code>first_name</code>, <code>last_name</code>, <code>student_id</code>, <code>class_name</code>.</p>
+<form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="bulk_upload">
+    {{ bulk_form.as_p }}
+    <button type="submit">Create Accounts From File</button>
+</form>
+
+{% if created_accounts %}
+<h2>Created Accounts</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Username</th>
+            <th>Password</th>
+            <th>First Name</th>
+            <th>Last Name</th>
+            <th>Student ID</th>
+            <th>Class</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for account in created_accounts %}
+        <tr>
+            <td>{{ account.username }}</td>
+            <td>{{ account.password }}</td>
+            <td>{{ account.first_name }}</td>
+            <td>{{ account.last_name }}</td>
+            <td>{{ account.student_id }}</td>
+            <td>{{ account.class_name }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+{% if skipped_rows %}
+<h2>Skipped Rows</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Row</th>
+            <th>Reason</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for item in skipped_rows %}
+        <tr>
+            <td>{{ item.row }}</td>
+            <td>{{ item.reason }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+<h2>Existing Class Groups</h2>
+{% if class_groups %}
+<ul>
+    {% for group in class_groups %}
+    <li>{{ group.name }}</li>
+    {% endfor %}
+</ul>
+{% else %}
+<p>No class groups yet. They are created automatically during account creation.</p>
+{% endif %}
+
+<h2>Student Roster</h2>
+{% if student_rows %}
+<table>
+    <thead>
+        <tr>
+            <th>Username</th>
+            <th>Name</th>
+            <th>Current Class</th>
+            <th>Move to Class</th>
+            <th>Delete</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for student in student_rows %}
+        <tr>
+            <td>{{ student.username }}</td>
+            <td>{{ student.first_name }} {{ student.last_name }}</td>
+            <td>{{ student.classes_display }}</td>
+            <td>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="move_student">
+                    <input type="hidden" name="student_id" value="{{ student.id }}">
+                    <input type="text" name="class_name" placeholder="Class name" required>
+                    <button type="submit">Move</button>
+                </form>
+            </td>
+            <td>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete_student">
+                    <input type="hidden" name="student_id" value="{{ student.id }}">
+                    <button type="submit" onclick="return confirm('Delete this student account and all associated chat logs?');">
+                        Delete
+                    </button>
+                </form>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No student accounts yet.</p>
+{% endif %}
+{% endblock %}

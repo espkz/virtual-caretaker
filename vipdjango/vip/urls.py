@@ -5,6 +5,7 @@ app_name = 'vip'
 urlpatterns = [
     path('', views.home, name='home'),
     path('professor/', views.professor_dashboard, name='professor_dashboard'),
+    path('professor/accounts/', views.professor_manage_accounts, name='professor_manage_accounts'),
     path('professor/prompts/<int:prompt_id>/activate/', views.set_active_prompt, name='set_active_prompt'),
     path('professor/prompts/<int:prompt_id>/deactivate/', views.deactivate_prompt, name='deactivate_prompt'),
     path('professor/prompts/new/', views.create_prompt, name='create_prompt'),

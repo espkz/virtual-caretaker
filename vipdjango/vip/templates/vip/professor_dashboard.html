@@ -30,6 +30,7 @@
 <nav class="tabs">
     <a class="tab-link {% if current_tab == 'prompts' %}active{% endif %}" href="{% url 'vip:professor_dashboard' %}?tab=prompts">Prompts</a>
     <a class="tab-link {% if current_tab == 'logs' %}active{% endif %}" href="{% url 'vip:professor_dashboard' %}?tab=logs">Student Logs</a>
+    <a class="tab-link" href="{% url 'vip:professor_manage_accounts' %}">Student Accounts</a>
 </nav>
 
 {% if current_tab == "prompts" %}
@@ -84,13 +85,16 @@
 
 {% if current_tab == "logs" %}
 <h2>Student Chat Logs</h2>
+<p><a href="{% url 'vip:professor_manage_accounts' %}">Manage Student Accounts and Class Groups</a></p>
 <form method="post" action="{% url 'vip:professor_reset_all_student_logs' %}" style="margin-bottom: 12px;">
     {% csrf_token %}
     <button type="submit" onclick="return confirm('Reset all student chat logs? This deletes every saved student session.');">
         Reset All Student Logs
     </button>
 </form>
-{% if students %}
+{% if students_by_class %}
+{% for class_block in students_by_class %}
+<h3>Class: {{ class_block.class_name }}</h3>
 <table>
     <thead>
         <tr>
@@ -101,7 +105,7 @@
         </tr>
     </thead>
     <tbody>
-    {% for student in students %}
+    {% for student in class_block.students %}
         <tr>
             <td>{{ student.username }}</td>
             <td>{{ student.session_count }}</td>
@@ -111,6 +115,7 @@
     {% endfor %}
     </tbody>
 </table>
+{% endfor %}
 {% else %}
 <p>No student users found in the Student group.</p>
 {% endif %}
