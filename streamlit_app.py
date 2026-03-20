@@ -68,6 +68,14 @@ st.markdown("""
 st.title("💬 Virtual Caretaker")
 
 
+def ensure_log_file(log_filename: str) -> None:
+    history_dir = os.path.dirname(log_filename) or "."
+    os.makedirs(history_dir, exist_ok=True)
+    if not os.path.exists(log_filename):
+        with open(log_filename, "w", encoding="utf-8") as f:
+            f.write("")
+
+
 # SIDEBAR
 
 # student and instructor tabs (only changes settings)
@@ -116,10 +124,8 @@ if "last_interaction" not in st.session_state:
     st.session_state.last_interaction = datetime.now().astimezone()
 if "log_filename" not in st.session_state:
     timestamp = datetime.now().astimezone().strftime("%Y-%m-%d_%H-%M-%S")
-    os.makedirs("history", exist_ok=True)
     st.session_state.log_filename = f"history/chat_{timestamp}.txt"
-    with open(st.session_state.log_filename, "w", encoding="utf-8") as f:
-        f.write("")
+    ensure_log_file(st.session_state.log_filename)
 
 # inactivity check
 def reset_session_if_needed():
@@ -129,16 +135,19 @@ def reset_session_if_needed():
         st.session_state.session_start = now
         st.session_state.last_interaction = now
         st.session_state.log_filename = f"history/chat_{now.strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+        ensure_log_file(st.session_state.log_filename)
 
 reset_session_if_needed()
 
 # save conversation
 def save_to_file(role, content):
+    ensure_log_file(st.session_state.log_filename)
     with open(st.session_state.log_filename, "a", encoding="utf-8") as f:
         ts = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
         f.write(f"[{ts}] {role}: {content.strip()}\n\n")
 
 def read_log():
+    ensure_log_file(st.session_state.log_filename)
     with open(st.session_state.log_filename, "r", encoding="utf-8") as f:
         return f.read()
 
@@ -262,6 +271,7 @@ if user_text:
 
 # download
 st.markdown("---")
+ensure_log_file(st.session_state.log_filename)
 with open(st.session_state.log_filename, "r", encoding="utf-8") as f:
     file_contents = f.read()
 
