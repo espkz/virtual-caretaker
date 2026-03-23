@@ -22,6 +22,31 @@
         background: #e2e8f0;
         font-weight: 600;
     }
+
+    .action-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        align-items: flex-start;
+    }
+
+    .action-btn {
+        display: inline-block;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 10px;
+        background: #f8fafc;
+        color: var(--text);
+        text-decoration: none;
+        font: inherit;
+        cursor: pointer;
+    }
+
+    .action-btn.danger {
+        border-color: #fca5a5;
+        background: #fef2f2;
+        color: #991b1b;
+    }
 </style>
 
 <h1>Professor Dashboard</h1>
@@ -58,19 +83,25 @@
             </td>
             <td>{{ prompt.updated_at }}</td>
             <td>
-                <a href="{% url 'vip:edit_prompt' prompt.id %}">Edit</a>
-                <br>
+                <div class="action-stack">
+                <a class="action-btn" href="{% url 'vip:edit_prompt' prompt.id %}">Edit</a>
+                <a class="action-btn" href="{% url 'vip:professor_download_prompt_txt' prompt.id %}">Download .txt</a>
                 {% if prompt.is_active %}
                     <form method="post" action="{% url 'vip:deactivate_prompt' prompt.id %}">
                         {% csrf_token %}
-                        <button type="submit">Deactivate</button>
+                        <button class="action-btn" type="submit">Deactivate</button>
                     </form>
                 {% else %}
                     <form method="post" action="{% url 'vip:set_active_prompt' prompt.id %}">
                         {% csrf_token %}
-                        <button type="submit">Activate</button>
+                        <button class="action-btn" type="submit">Activate</button>
                     </form>
                 {% endif %}
+                    <form method="post" action="{% url 'vip:delete_prompt' prompt.id %}">
+                        {% csrf_token %}
+                        <button class="action-btn danger" type="submit" onclick="return confirm('Delete this prompt?');">Delete</button>
+                    </form>
+                </div>
             </td>
         </tr>
     {% endfor %}
@@ -81,6 +112,13 @@
 {% endif %}
 
 <p><a href="{% url 'vip:create_prompt' %}">Add New Prompt</a></p>
+<h3>Upload Prompt File</h3>
+<p class="muted">Upload a <code>.txt</code> or <code>.md</code> file to create a new prompt.</p>
+<form method="post" action="{% url 'vip:professor_upload_prompt_file' %}" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ prompt_upload_form.as_p }}
+    <button type="submit">Upload Prompt</button>
+</form>
 {% endif %}
 
 {% if current_tab == "logs" %}
@@ -117,13 +155,7 @@
 </table>
 {% endfor %}
 {% else %}
-<p>No student users found in the Student group.</p>
+<p>No student users found in Student or Class groups.</p>
 {% endif %}
 {% endif %}
-
-
-<form method="post" action="{% url 'logout' %}" class="logout-form">
-    {% csrf_token %}
-    <button type="submit">Logout</button>
-</form>
 {% endblock %}

@@ -4,10 +4,14 @@ from . import views
 app_name = 'vip'
 urlpatterns = [
     path('', views.home, name='home'),
+    path('account/', views.account_settings, name='account_settings'),
     path('professor/', views.professor_dashboard, name='professor_dashboard'),
     path('professor/accounts/', views.professor_manage_accounts, name='professor_manage_accounts'),
+    path('professor/prompts/<int:prompt_id>/download/', views.professor_download_prompt_txt, name='professor_download_prompt_txt'),
+    path('professor/prompts/upload/', views.professor_upload_prompt_file, name='professor_upload_prompt_file'),
     path('professor/prompts/<int:prompt_id>/activate/', views.set_active_prompt, name='set_active_prompt'),
     path('professor/prompts/<int:prompt_id>/deactivate/', views.deactivate_prompt, name='deactivate_prompt'),
+    path('professor/prompts/<int:prompt_id>/delete/', views.delete_prompt, name='delete_prompt'),
     path('professor/prompts/new/', views.create_prompt, name='create_prompt'),
     path('professor/prompts/<int:prompt_id>/edit/', views.edit_prompt, name='edit_prompt'),
     path('professor/students/<int:student_id>/logs/', views.professor_student_logs, name='professor_student_logs'),

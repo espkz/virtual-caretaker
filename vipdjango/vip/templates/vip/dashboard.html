@@ -2,9 +2,5 @@
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
-<p>Welcome {{ request.user.username }}. You are not assigned to a group, please wait.</p>
-<form method="post" action="{% url 'logout' %}">
-    {% csrf_token %}
-    <button type="submit">Logout</button>
-</form>
+<p>Welcome {{ request.user.username }}. Please wait until you are assigned to a class.</p>
 {% endblock %}

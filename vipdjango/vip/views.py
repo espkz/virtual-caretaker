@@ -9,14 +9,23 @@ from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, render
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
+from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import Group
-from django.db.models import Count, Max
+from django.contrib.auth import update_session_auth_hash
+from django.db.models import Count, Max, Q
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils.text import slugify
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .forms import ClassGroupCreateForm, RolePromptForm, StudentAccountCreateForm, StudentBulkUploadForm
+from .forms import (
+    ClassGroupCreateForm,
+    PromptTextUploadForm,
+    RolePromptForm,
+    StudentAccountCreateForm,
+    StudentBulkUploadForm,
+)
 from .models import ChatMessage, ChatSession, RolePrompt
 
 """
@@ -82,14 +91,8 @@ def _clean_name_part(value):
     return re.sub(r"[^a-zA-Z0-9]", "", value or "").lower()
 
 
-def _build_student_username(first_name, last_name):
-    first = _clean_name_part(first_name)
-    last = _clean_name_part(last_name)
-    if not first and not last:
-        return "student"
-    if first and last:
-        return f"{first}.{last}"
-    return first or last
+def _normalize_net_id(value):
+    return (value or "").strip().lower()
 
 
 def _build_student_password(first_name, last_name, student_id):
@@ -143,14 +146,16 @@ def _read_bulk_rows(uploaded_file):
     raise ValueError("Unsupported file type. Please upload .xlsx or .csv.")
 
 
-def _create_student_account(first_name, last_name, student_id, class_name):
+def _create_student_account(first_name, last_name, net_id, student_id, class_name):
     User = get_user_model()
-    username = _build_student_username(first_name, last_name)
+    username = _normalize_net_id(net_id)
     password = _build_student_password(first_name, last_name, student_id)
     normalized_class = _normalize_class_name(class_name)
 
+    if not username:
+        return None, "NetID is required."
     if User.objects.filter(username=username).exists():
-        return None, f'Username "{username}" already exists.'
+        return None, f'NetID "{username}" already exists.'
 
     user = User.objects.create_user(
         username=username,
@@ -160,23 +165,49 @@ def _create_student_account(first_name, last_name, student_id, class_name):
     )
 
     student_group, _ = Group.objects.get_or_create(name="Student")
-    class_group, _ = Group.objects.get_or_create(name=f"Class: {normalized_class}")
-    user.groups.add(student_group, class_group)
+    user.groups.add(student_group)
+    if normalized_class:
+        class_group, _ = Group.objects.get_or_create(name=f"Class: {normalized_class}")
+        user.groups.add(class_group)
     return {
         "username": username,
         "password": password,
+        "net_id": username,
         "first_name": first_name.strip(),
         "last_name": last_name.strip(),
         "student_id": student_id.strip(),
-        "class_name": normalized_class,
+        "class_name": normalized_class or "Unassigned",
     }, None
+
+
+def _is_professor(user):
+    return user.is_superuser or user.groups.filter(name__iexact="Professor").exists()
+
+
+def _is_student(user):
+    if _is_professor(user):
+        return False
+    return (
+        user.groups.filter(name__startswith="Class: ")
+        .exclude(name__iexact="Class: Unassigned")
+        .exists()
+    )
+
+
+def _student_queryset():
+    User = get_user_model()
+    return (
+        User.objects.filter(Q(groups__name__startswith="Class: ") | Q(groups__name="Student"))
+        .exclude(groups__name="Professor")
+        .distinct()
+    )
 
 
 @login_required
 def home(request):
-    if request.user.groups.filter(name="Professor").exists():
+    if _is_professor(request.user):
         return redirect("vip:professor_dashboard")
-    elif request.user.groups.filter(name="Student").exists():
+    elif _is_student(request.user):
         return redirect("vip:student_dashboard")
     else:
         return redirect("vip:dashboard")
@@ -185,12 +216,51 @@ def home(request):
 def dashboard(request):
     return render(request, "vip/dashboard.html")
 
+
+@login_required
+def account_settings(request):
+    is_professor = _is_professor(request.user)
+    status_message = ""
+    error_message = ""
+    password_form = PasswordChangeForm(request.user)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        if action == "change_password":
+            password_form = PasswordChangeForm(request.user, request.POST)
+            if password_form.is_valid():
+                user = password_form.save()
+                update_session_auth_hash(request, user)
+                status_message = "Password updated successfully."
+            else:
+                error_message = "Please fix password form errors."
+
+        if action == "update_name" and is_professor:
+            first_name = request.POST.get("first_name", "").strip()
+            last_name = request.POST.get("last_name", "").strip()
+            request.user.first_name = first_name
+            request.user.last_name = last_name
+            request.user.save(update_fields=["first_name", "last_name"])
+            status_message = "Profile name updated."
+
+    return render(
+        request,
+        "vip/account_settings.html",
+        {
+            "is_professor": is_professor,
+            "status_message": status_message,
+            "error_message": error_message,
+            "password_form": password_form,
+        },
+    )
+
 """
 PROFESSOR
 """
 @login_required
 def professor_dashboard(request):
-    if not request.user.groups.filter(name="Professor").exists():
+    if not _is_professor(request.user):
         return redirect("vip:home")
 
     current_tab = request.GET.get("tab", "prompts")
@@ -198,10 +268,9 @@ def professor_dashboard(request):
         current_tab = "prompts"
 
     prompts = RolePrompt.objects.order_by("-updated_at")
-    User = get_user_model()
+    prompt_upload_form = PromptTextUploadForm()
     students = (
-        User.objects.filter(groups__name="Student")
-        .prefetch_related("groups")
+        _student_queryset().prefetch_related("groups")
         .annotate(
             session_count=Count("chat_sessions", distinct=True),
             last_session_at=Max("chat_sessions__started_at"),
@@ -212,7 +281,7 @@ def professor_dashboard(request):
     for student in students:
         class_names = []
         for group in student.groups.all():
-            if group.name.startswith("Class: "):
+            if group.name.startswith("Class: ") and group.name.lower() != "class: unassigned":
                 class_names.append(group.name.replace("Class: ", "", 1))
         if not class_names:
             class_names = ["Unassigned"]
@@ -227,6 +296,7 @@ def professor_dashboard(request):
         "vip/professor_dashboard.html",
         {
             "prompts": prompts,
+            "prompt_upload_form": prompt_upload_form,
             "students_by_class": students_by_class,
             "current_tab": current_tab,
         },
@@ -234,9 +304,52 @@ def professor_dashboard(request):
 
 
 @login_required
-def professor_manage_accounts(request):
-    if not request.user.groups.filter(name="Professor").exists():
+def professor_download_prompt_txt(request, prompt_id):
+    if not _is_professor(request.user):
         return redirect("vip:home")
+
+    prompt = get_object_or_404(RolePrompt, pk=prompt_id)
+    filename_base = slugify(prompt.title) or f"prompt-{prompt.id}"
+    response = HttpResponse(prompt.content, content_type="text/plain; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="{filename_base}.txt"'
+    return response
+
+
+@login_required
+@require_POST
+def professor_upload_prompt_file(request):
+    if not _is_professor(request.user):
+        return redirect("vip:home")
+
+    form = PromptTextUploadForm(request.POST, request.FILES)
+    if not form.is_valid():
+        return redirect(f"{reverse('vip:professor_dashboard')}?tab=prompts")
+
+    uploaded = form.cleaned_data["file"]
+    try:
+        content = uploaded.read().decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return HttpResponseBadRequest("File must be UTF-8 text.")
+
+    title = form.cleaned_data["title"].strip() if form.cleaned_data["title"] else Path(uploaded.name).stem
+    RolePrompt.objects.create(
+        title=title or "Uploaded Prompt",
+        content=content,
+        created_by=request.user,
+        is_active=form.cleaned_data["is_active"],
+    )
+    return redirect(f"{reverse('vip:professor_dashboard')}?tab=prompts")
+
+
+@login_required
+def professor_manage_accounts(request):
+    if not _is_professor(request.user):
+        return redirect("vip:home")
+
+    legacy_unassigned_group = Group.objects.filter(name__iexact="Class: Unassigned").first()
+    if legacy_unassigned_group:
+        legacy_unassigned_group.user_set.clear()
+        legacy_unassigned_group.delete()
 
     single_form = StudentAccountCreateForm()
     bulk_form = StudentBulkUploadForm()
@@ -251,17 +364,27 @@ def professor_manage_accounts(request):
         if action == "create_single":
             single_form = StudentAccountCreateForm(request.POST)
             if single_form.is_valid():
-                account, error = _create_student_account(
-                    first_name=single_form.cleaned_data["first_name"],
-                    last_name=single_form.cleaned_data["last_name"],
-                    student_id=single_form.cleaned_data["student_id"],
-                    class_name=single_form.cleaned_data["class_name"],
-                )
-                if error:
-                    skipped_rows.append({"row": "Single form", "reason": error})
+                selected_class = _normalize_class_name(single_form.cleaned_data["class_name"])
+                class_group = None
+                if selected_class:
+                    class_group = Group.objects.filter(name=f"Class: {selected_class}").first()
+                if selected_class and not class_group:
+                    skipped_rows.append(
+                        {"row": "Single form", "reason": "Please select an existing class group from the dropdown."}
+                    )
                 else:
-                    created_accounts.append(account)
-                    info_message = "Student account created."
+                    account, error = _create_student_account(
+                        first_name=single_form.cleaned_data["first_name"],
+                        last_name=single_form.cleaned_data["last_name"],
+                        net_id=single_form.cleaned_data["net_id"],
+                        student_id=single_form.cleaned_data["student_id"],
+                        class_name=selected_class,
+                    )
+                    if error:
+                        skipped_rows.append({"row": "Single form", "reason": error})
+                    else:
+                        created_accounts.append(account)
+                        info_message = "Student account created."
 
         if action == "bulk_upload":
             bulk_form = StudentBulkUploadForm(request.POST, request.FILES)
@@ -269,6 +392,7 @@ def professor_manage_accounts(request):
                 aliases = {
                     "first_name": ["firstname", "first", "givenname"],
                     "last_name": ["lastname", "last", "surname", "familyname"],
+                    "net_id": ["netid", "net_id", "username", "login"],
                     "student_id": ["studentid", "id", "studentnumber", "sid"],
                     "class_name": ["classname", "class", "course", "section", "group"],
                 }
@@ -281,14 +405,18 @@ def professor_manage_accounts(request):
                 for idx, row in enumerate(rows, start=2):
                     first_name = _extract_row_value(row, aliases["first_name"])
                     last_name = _extract_row_value(row, aliases["last_name"])
+                    net_id = _extract_row_value(row, aliases["net_id"])
                     student_id = _extract_row_value(row, aliases["student_id"])
                     class_name = _extract_row_value(row, aliases["class_name"])
                     if re.match(r"^\d+\.0$", student_id):
                         student_id = student_id[:-2]
 
-                    if not first_name or not last_name or not student_id or not class_name:
+                    if not first_name or not last_name or not net_id or not student_id:
                         skipped_rows.append(
-                            {"row": idx, "reason": "Missing required fields (first_name, last_name, student_id, class_name)."}
+                            {
+                                "row": idx,
+                                "reason": "Missing required fields (first_name, last_name, net_id, student_id).",
+                            }
                         )
                         continue
                     if not student_id.isdigit():
@@ -298,6 +426,7 @@ def professor_manage_accounts(request):
                     account, error = _create_student_account(
                         first_name=first_name,
                         last_name=last_name,
+                        net_id=net_id,
                         student_id=student_id,
                         class_name=class_name,
                     )
@@ -312,40 +441,61 @@ def professor_manage_accounts(request):
             class_form = ClassGroupCreateForm(request.POST)
             if class_form.is_valid():
                 normalized_class = _normalize_class_name(class_form.cleaned_data["class_name"])
-                Group.objects.get_or_create(name=f"Class: {normalized_class}")
-                info_message = f'Class group "{normalized_class}" is ready.'
+                if not normalized_class:
+                    skipped_rows.append({"row": "Create class", "reason": "Class name cannot be blank."})
+                else:
+                    Group.objects.get_or_create(name=f"Class: {normalized_class}")
+                    info_message = f'Class group "{normalized_class}" is ready.'
 
         if action == "move_student":
             student_id = request.POST.get("student_id", "").strip()
-            class_name = _normalize_class_name(request.POST.get("class_name", ""))
-            User = get_user_model()
-            student = get_object_or_404(User, pk=student_id, groups__name="Student")
-            if class_name:
-                class_group, _ = Group.objects.get_or_create(name=f"Class: {class_name}")
-                existing_class_groups = student.groups.filter(name__startswith="Class: ")
-                student.groups.remove(*existing_class_groups)
-                student.groups.add(class_group)
-                info_message = f"Moved {student.username} to class {class_name}."
+            selected_class_group_id = request.POST.get("class_group_id", "").strip()
+            student = get_object_or_404(_student_queryset(), pk=student_id)
+            existing_class_groups = student.groups.filter(name__startswith="Class: ")
+            student.groups.remove(*existing_class_groups)
+
+            if selected_class_group_id == "__UNASSIGNED__":
+                info_message = f"Moved {student.username} to Unassigned."
+            elif selected_class_group_id:
+                class_group = Group.objects.filter(pk=selected_class_group_id, name__startswith="Class: ").first()
+                if class_group:
+                    student.groups.add(class_group)
+                    class_name = class_group.name.replace("Class: ", "", 1)
+                    info_message = f"Moved {student.username} to class {class_name}."
+                else:
+                    skipped_rows.append({"row": "Move student", "reason": "Selected class group does not exist."})
             else:
-                skipped_rows.append({"row": "Move student", "reason": "Class name cannot be empty."})
+                skipped_rows.append({"row": "Move student", "reason": "Please choose a class from the dropdown."})
 
         if action == "delete_student":
             student_id = request.POST.get("student_id", "").strip()
-            User = get_user_model()
-            student = get_object_or_404(User, pk=student_id, groups__name="Student")
+            student = get_object_or_404(_student_queryset(), pk=student_id)
             username = student.username
             student.delete()
             info_message = f"Deleted student account {username}."
 
-    class_groups = Group.objects.filter(name__startswith="Class: ").order_by("name")
-    User = get_user_model()
-    roster_students = User.objects.filter(groups__name="Student").prefetch_related("groups").order_by("username")
+        if action == "delete_class":
+            class_group_id = request.POST.get("class_group_id", "").strip()
+            class_group = Group.objects.filter(pk=class_group_id, name__startswith="Class: ").first()
+            if class_group:
+                class_name = class_group.name.replace("Class: ", "", 1)
+                class_group.delete()
+                info_message = f'Deleted class group "{class_name}".'
+            else:
+                skipped_rows.append({"row": "Delete class", "reason": "Class group not found."})
+
+    class_groups = (
+        Group.objects.filter(name__startswith="Class: ")
+        .exclude(name__iexact="Class: Unassigned")
+        .order_by("name")
+    )
+    roster_students = _student_queryset().prefetch_related("groups").order_by("username")
     student_rows = []
     for student in roster_students:
         class_names = [
             group.name.replace("Class: ", "", 1)
             for group in student.groups.all()
-            if group.name.startswith("Class: ")
+            if group.name.startswith("Class: ") and group.name.lower() != "class: unassigned"
         ]
         student_rows.append(
             {
@@ -375,7 +525,7 @@ def professor_manage_accounts(request):
 
 @login_required
 def create_prompt(request):
-    if not request.user.groups.filter(name="Professor").exists():
+    if not _is_professor(request.user):
         return redirect("vip:home")
 
     if request.method == "POST":
@@ -397,7 +547,7 @@ def create_prompt(request):
 
 @login_required
 def edit_prompt(request, prompt_id):
-    if not request.user.groups.filter(name="Professor").exists():
+    if not _is_professor(request.user):
         return redirect("vip:home")
 
     prompt = get_object_or_404(RolePrompt, pk=prompt_id)
@@ -420,7 +570,7 @@ def edit_prompt(request, prompt_id):
 @login_required
 @require_POST
 def set_active_prompt(request, prompt_id):
-    if not request.user.groups.filter(name="Professor").exists():
+    if not _is_professor(request.user):
         return redirect("vip:home")
 
     selected_prompt = get_object_or_404(RolePrompt, pk=prompt_id)
@@ -432,7 +582,7 @@ def set_active_prompt(request, prompt_id):
 @login_required
 @require_POST
 def deactivate_prompt(request, prompt_id):
-    if not request.user.groups.filter(name="Professor").exists():
+    if not _is_professor(request.user):
         return redirect("vip:home")
 
     selected_prompt = get_object_or_404(RolePrompt, pk=prompt_id)
@@ -442,8 +592,19 @@ def deactivate_prompt(request, prompt_id):
 
 
 @login_required
+@require_POST
+def delete_prompt(request, prompt_id):
+    if not _is_professor(request.user):
+        return redirect("vip:home")
+
+    prompt = get_object_or_404(RolePrompt, pk=prompt_id)
+    prompt.delete()
+    return redirect(f"{reverse('vip:professor_dashboard')}?tab=prompts")
+
+
+@login_required
 def professor_session_detail(request, session_id):
-    if not request.user.groups.filter(name="Professor").exists():
+    if not _is_professor(request.user):
         return redirect("vip:home")
 
     session = get_object_or_404(
@@ -464,11 +625,10 @@ def professor_session_detail(request, session_id):
 
 @login_required
 def professor_student_logs(request, student_id):
-    if not request.user.groups.filter(name="Professor").exists():
+    if not _is_professor(request.user):
         return redirect("vip:home")
 
-    User = get_user_model()
-    student = get_object_or_404(User, pk=student_id, groups__name="Student")
+    student = get_object_or_404(_student_queryset(), pk=student_id)
     sessions = (
         ChatSession.objects.filter(student=student)
         .select_related("role_prompt")
@@ -489,7 +649,7 @@ def professor_student_logs(request, student_id):
 @login_required
 @require_POST
 def professor_delete_session(request, session_id):
-    if not request.user.groups.filter(name="Professor").exists():
+    if not _is_professor(request.user):
         return redirect("vip:home")
 
     session = get_object_or_404(ChatSession, pk=session_id)
@@ -505,11 +665,10 @@ def professor_delete_session(request, session_id):
 @login_required
 @require_POST
 def professor_delete_student_logs(request, student_id):
-    if not request.user.groups.filter(name="Professor").exists():
+    if not _is_professor(request.user):
         return redirect("vip:home")
 
-    User = get_user_model()
-    student = get_object_or_404(User, pk=student_id, groups__name="Student")
+    student = get_object_or_404(_student_queryset(), pk=student_id)
     ChatSession.objects.filter(student=student).delete()
     return redirect("vip:professor_student_logs", student_id=student_id)
 
@@ -517,11 +676,10 @@ def professor_delete_student_logs(request, student_id):
 @login_required
 @require_POST
 def professor_reset_all_student_logs(request):
-    if not request.user.groups.filter(name="Professor").exists():
+    if not _is_professor(request.user):
         return redirect("vip:home")
 
-    User = get_user_model()
-    student_ids = User.objects.filter(groups__name="Student").values_list("id", flat=True)
+    student_ids = _student_queryset().values_list("id", flat=True)
     ChatSession.objects.filter(student_id__in=student_ids).delete()
     return redirect(f"{reverse('vip:professor_dashboard')}?tab=logs")
 
@@ -532,7 +690,7 @@ STUDENT
 
 @login_required
 def student_dashboard(request):
-    if not request.user.groups.filter(name="Student").exists():
+    if not _is_student(request.user):
         return redirect("vip:home")
 
     active_prompts = RolePrompt.objects.filter(is_active=True).order_by("title")
@@ -697,7 +855,7 @@ def student_dashboard(request):
 
 @login_required
 def student_download_session(request, session_id):
-    if not request.user.groups.filter(name="Student").exists():
+    if not _is_student(request.user):
         return redirect("vip:home")
 
     session = get_object_or_404(
@@ -726,7 +884,7 @@ def student_download_session(request, session_id):
 
 @login_required
 def student_message_tts(request, message_id):
-    if not request.user.groups.filter(name="Student").exists():
+    if not _is_student(request.user):
         return redirect("vip:home")
 
     message = get_object_or_404(

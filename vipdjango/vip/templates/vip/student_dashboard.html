@@ -329,11 +329,6 @@
     </section>
 </div>
 
-<form method="post" action="{% url 'logout' %}" class="logout-form">
-    {% csrf_token %}
-    <button type="submit">Logout</button>
-</form>
-
 <script>
     (function () {
         const chatWindow = document.querySelector(".chat-window");

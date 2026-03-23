@@ -102,10 +102,40 @@
         button:hover {
             background: #f3f4f6;
         }
+
+        .top-nav {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-bottom: 14px;
+            align-items: center;
+        }
+
+        .top-link {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 6px 10px;
+            text-decoration: none;
+            color: var(--text);
+            background: #f8fafc;
+            font-size: 0.9rem;
+        }
     </style>
 </head>
 <body>
     <main class="page">
+        {% block top_nav %}
+        {% if request.user.is_authenticated %}
+        <div class="top-nav">
+            <a class="top-link" href="{% url 'vip:home' %}">Home</a>
+            <a class="top-link" href="{% url 'vip:account_settings' %}">Account</a>
+            <form method="post" action="{% url 'logout' %}">
+                {% csrf_token %}
+                <button type="submit">Logout</button>
+            </form>
+        </div>
+        {% endif %}
+        {% endblock %}
         {% block content %}{% endblock %}
     </main>
 </body>

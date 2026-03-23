@@ -1,10 +1,41 @@
 {% extends "vip/base.html" %}
 {% block title %}Student Accounts{% endblock %}
 {% block content %}
-<h1>Student Accounts</h1>
-<p class="muted">Create one account at a time or upload a spreadsheet to create many students at once.</p>
+<style>
+    .tabs {
+        display: flex;
+        gap: 8px;
+        margin: 10px 0 18px 0;
+    }
 
-<p><a href="{% url 'vip:professor_dashboard' %}">Back to Professor Dashboard</a></p>
+    .tab-link {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 10px;
+        text-decoration: none;
+        color: var(--text);
+        background: #f8fafc;
+    }
+
+    .tab-link.active {
+        background: #e2e8f0;
+        font-weight: 600;
+    }
+
+    .secret {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        letter-spacing: 0.02em;
+    }
+</style>
+
+<h1>Student Accounts</h1>
+<p class="muted">Create one account at a time or upload a spreadsheet to create many students at once. If class is blank, student will be assigned to Unassigned.</p>
+
+<nav class="tabs">
+    <a class="tab-link" href="{% url 'vip:professor_dashboard' %}?tab=prompts">Prompts</a>
+    <a class="tab-link" href="{% url 'vip:professor_dashboard' %}?tab=logs">Student Logs</a>
+    <a class="tab-link active" href="{% url 'vip:professor_manage_accounts' %}">Student Accounts</a>
+</nav>
 
 {% if info_message %}
 <div class="content-card">
@@ -16,7 +47,31 @@
 <form method="post">
     {% csrf_token %}
     <input type="hidden" name="action" value="create_single">
-    {{ single_form.as_p }}
+    <p>
+        <label for="single-first-name">First name</label><br>
+        <input id="single-first-name" type="text" name="first_name" required>
+    </p>
+    <p>
+        <label for="single-last-name">Last name</label><br>
+        <input id="single-last-name" type="text" name="last_name" required>
+    </p>
+    <p>
+        <label for="single-student-id">Student ID (numbers only)</label><br>
+        <input id="single-student-id" type="text" name="student_id" required>
+    </p>
+    <p>
+        <label for="single-net-id">NetID (used for username + initial password)</label><br>
+        <input id="single-net-id" type="text" name="net_id" required>
+    </p>
+    <p>
+        <label for="single-class-name">Class</label><br>
+        <select id="single-class-name" name="class_name">
+            <option value="" selected>Unassigned</option>
+            {% for group in class_groups %}
+            <option value="{{ group.name|cut:'Class: ' }}">{{ group.name }}</option>
+            {% endfor %}
+        </select>
+    </p>
     <button type="submit">Create Student Account</button>
 </form>
 
@@ -29,7 +84,7 @@
 </form>
 
 <h2>Bulk Upload</h2>
-<p class="muted">Accepted file types: <code>.xlsx</code> and <code>.csv</code>. Required columns: <code>first_name</code>, <code>last_name</code>, <code>student_id</code>, <code>class_name</code>.</p>
+<p class="muted">Accepted file types: <code>.xlsx</code> and <code>.csv</code>. Required columns: <code>first_name</code>, <code>last_name</code>, <code>net_id</code>, <code>student_id</code>. Optional column: <code>class_name</code> (blank becomes Unassigned).</p>
 <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
     <input type="hidden" name="action" value="bulk_upload">
@@ -42,6 +97,7 @@
 <table>
     <thead>
         <tr>
+            <th>NetID</th>
             <th>Username</th>
             <th>Password</th>
             <th>First Name</th>
@@ -53,8 +109,12 @@
     <tbody>
     {% for account in created_accounts %}
         <tr>
+            <td>{{ account.net_id }}</td>
             <td>{{ account.username }}</td>
-            <td>{{ account.password }}</td>
+            <td>
+                <span class="secret" data-password="{{ account.password }}" data-visible="0">••••••••</span>
+                <button type="button" class="toggle-password">Show</button>
+            </td>
             <td>{{ account.first_name }}</td>
             <td>{{ account.last_name }}</td>
             <td>{{ account.student_id }}</td>
@@ -87,11 +147,31 @@
 
 <h2>Existing Class Groups</h2>
 {% if class_groups %}
-<ul>
+<table>
+    <thead>
+        <tr>
+            <th>Class Group</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
     {% for group in class_groups %}
-    <li>{{ group.name }}</li>
+        <tr>
+            <td>{{ group.name }}</td>
+            <td>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete_class">
+                    <input type="hidden" name="class_group_id" value="{{ group.id }}">
+                    <button type="submit" onclick="return confirm('Delete this class group? Students will become unassigned.');">
+                        Delete Class
+                    </button>
+                </form>
+            </td>
+        </tr>
     {% endfor %}
-</ul>
+    </tbody>
+</table>
 {% else %}
 <p>No class groups yet. They are created automatically during account creation.</p>
 {% endif %}
@@ -119,7 +199,13 @@
                     {% csrf_token %}
                     <input type="hidden" name="action" value="move_student">
                     <input type="hidden" name="student_id" value="{{ student.id }}">
-                    <input type="text" name="class_name" placeholder="Class name" required>
+                    <select name="class_group_id" required>
+                        <option value="" selected disabled>Select class</option>
+                        {% for group in class_groups %}
+                        <option value="{{ group.id }}">{{ group.name }}</option>
+                        {% endfor %}
+                        <option value="__UNASSIGNED__">Unassigned</option>
+                    </select>
                     <button type="submit">Move</button>
                 </form>
             </td>
@@ -140,4 +226,23 @@
 {% else %}
 <p>No student accounts yet.</p>
 {% endif %}
+
+<script>
+    document.querySelectorAll(".toggle-password").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const secretEl = btn.parentElement.querySelector(".secret");
+            if (!secretEl) return;
+            const currentlyVisible = secretEl.dataset.visible === "1";
+            if (currentlyVisible) {
+                secretEl.textContent = "••••••••";
+                secretEl.dataset.visible = "0";
+                btn.textContent = "Show";
+            } else {
+                secretEl.textContent = secretEl.dataset.password || "";
+                secretEl.dataset.visible = "1";
+                btn.textContent = "Hide";
+            }
+        });
+    });
+</script>
 {% endblock %}
