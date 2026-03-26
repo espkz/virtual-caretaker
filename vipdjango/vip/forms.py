@@ -51,7 +51,7 @@ class StudentBulkUploadForm(forms.Form):
 
 
 class ClassGroupCreateForm(forms.Form):
-    class_name = forms.CharField(max_length=150, help_text='Example: "NURS-101 Section A"')
+    class_name = forms.CharField(max_length=150)
 
 
 class PromptTextUploadForm(forms.Form):

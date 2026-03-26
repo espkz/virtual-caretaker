@@ -2,5 +2,5 @@
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
-<p>Welcome {{ request.user.username }}. Please wait until you are assigned to a class.</p>
+<p>Welcome {% if request.user.first_name %}{{ request.user.first_name }}{% else %}{{ request.user.username }}{% endif %}. Please wait until you are assigned to a class.</p>
 {% endblock %}

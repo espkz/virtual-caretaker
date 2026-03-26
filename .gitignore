@@ -1,2 +1,7 @@
 api_key.txt
 users.txt
+env.txt
+**/__pycache__/
+*.pyc
+vipdjango/db.sqlite3
+backend.py

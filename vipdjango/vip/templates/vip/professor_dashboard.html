@@ -50,7 +50,7 @@
 </style>
 
 <h1>Professor Dashboard</h1>
-<p>Welcome {{ request.user.username }}</p>
+<p>Welcome {% if request.user.first_name %}{{ request.user.first_name }}{% else %}{{ request.user.username }}{% endif %}.</p>
 
 <nav class="tabs">
     <a class="tab-link {% if current_tab == 'prompts' %}active{% endif %}" href="{% url 'vip:professor_dashboard' %}?tab=prompts">Prompts</a>

@@ -49,10 +49,17 @@ def _build_chat_prompt(role_text, session_messages):
 
 
 def _load_api_key_from_txt():
-    api_key_path = Path(settings.BASE_DIR).parent / "api_key.txt"
-    if not api_key_path.exists():
-        return ""
-    return api_key_path.read_text(encoding="utf-8").strip()
+    # Preferred: environment variable for deployment safety.
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if api_key:
+        return api_key
+
+    # Local file fallback (commented out for now).
+    # api_key_path = Path(settings.BASE_DIR).parent / "api_key.txt"
+    # if api_key_path.exists():
+    #     return api_key_path.read_text(encoding="utf-8").strip()
+
+    return ""
 
 
 def _parse_dialogue_and_emotion(text):
