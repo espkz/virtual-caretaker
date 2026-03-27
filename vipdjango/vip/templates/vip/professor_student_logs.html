@@ -1,7 +1,19 @@
 {% extends "vip/base.html" %}
-{% block title %}{{ student.username }} Logs{% endblock %}
+{% block title %}
+{% if student.first_name or student.last_name %}
+{{ student.first_name }} {{ student.last_name }} ({{ student.username }}) Logs
+{% else %}
+{{ student.username }} Logs
+{% endif %}
+{% endblock %}
 {% block content %}
-<h1>{{ student.username }} - Chat Logs</h1>
+<h1>
+{% if student.first_name or student.last_name %}
+{{ student.first_name }} {{ student.last_name }} ({{ student.username }}) - Chat Logs
+{% else %}
+{{ student.username }} - Chat Logs
+{% endif %}
+</h1>
 <p class="muted">All sessions for this student.</p>
 <form method="post" action="{% url 'vip:professor_delete_student_logs' student.id %}" style="margin-bottom: 12px;">
     {% csrf_token %}

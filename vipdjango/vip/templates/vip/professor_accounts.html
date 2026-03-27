@@ -181,8 +181,7 @@
 <table>
     <thead>
         <tr>
-            <th>Username</th>
-            <th>Name</th>
+            <th>Student</th>
             <th>Current Class</th>
             <th>Move to Class</th>
             <th>Delete</th>
@@ -191,8 +190,13 @@
     <tbody>
     {% for student in student_rows %}
         <tr>
-            <td>{{ student.username }}</td>
-            <td>{{ student.first_name }} {{ student.last_name }}</td>
+            <td>
+                {% if student.first_name or student.last_name %}
+                    {{ student.first_name }} {{ student.last_name }} ({{ student.username }})
+                {% else %}
+                    {{ student.username }}
+                {% endif %}
+            </td>
             <td>{{ student.classes_display }}</td>
             <td>
                 <form method="post">

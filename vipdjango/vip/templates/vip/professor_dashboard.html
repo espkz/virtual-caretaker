@@ -145,7 +145,13 @@
     <tbody>
     {% for student in class_block.students %}
         <tr>
-            <td>{{ student.username }}</td>
+            <td>
+                {% if student.first_name or student.last_name %}
+                    {{ student.first_name }} {{ student.last_name }} ({{ student.username }})
+                {% else %}
+                    {{ student.username }}
+                {% endif %}
+            </td>
             <td>{{ student.session_count }}</td>
             <td>{% if student.last_session_at %}{{ student.last_session_at }}{% else %}No sessions yet{% endif %}</td>
             <td><a href="{% url 'vip:professor_student_logs' student.id %}">View Logs</a></td>
