@@ -84,13 +84,29 @@ WSGI_APPLICATION = 'vipson_manager.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+#
+# Choose backend with DJANGO_DB_ENGINE:
+# - sqlite (default)
+# - postgres
+DB_ENGINE = os.getenv("DJANGO_DB_ENGINE", "sqlite").strip().lower()
+if DB_ENGINE == "postgres":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("POSTGRES_DB", "").strip(),
+            "USER": os.getenv("POSTGRES_USER", "").strip(),
+            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "").strip(),
+            "HOST": os.getenv("POSTGRES_HOST", "").strip(),
+            "PORT": os.getenv("POSTGRES_PORT", "5432").strip(),
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": os.getenv("SQLITE_PATH", str(BASE_DIR / "db.sqlite3")).strip(),
+        }
+    }
 
 
 # Password validation
