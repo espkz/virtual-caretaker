@@ -349,12 +349,14 @@
             recognition.interimResults = true;
             recognition.continuous = true;
 
-            let finalTranscript = "";
-            let baseText = "";
+            let committedTranscript = "";
             let isListening = false;
             let shouldAutoSubmit = false;
             recognition.onstart = function () {
-                baseText = textarea.value ? textarea.value.trim() + " " : "";
+                committedTranscript = textarea.value ? textarea.value.trim() : "";
+                if (committedTranscript) {
+                    committedTranscript += " ";
+                }
                 status.textContent = "Listening...";
                 isListening = true;
                 micToggleBtn.classList.add("listening");
@@ -365,13 +367,12 @@
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     const transcript = event.results[i][0].transcript;
                     if (event.results[i].isFinal) {
-                        finalTranscript += transcript + " ";
+                        committedTranscript += transcript.trim() + " ";
                     } else {
                         interim += transcript;
                     }
                 }
-                textarea.value = (baseText + finalTranscript + interim).trim();
-                finalTranscript = "";
+                textarea.value = (committedTranscript + interim).trim();
             };
             recognition.onerror = function (event) {
                 status.textContent = "Speech error: " + event.error;

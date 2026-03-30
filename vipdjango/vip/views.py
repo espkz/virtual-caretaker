@@ -41,11 +41,23 @@ def _build_chat_prompt(role_text, session_messages):
         prompt_template = "{role}\n\nConversation:\n"
 
     conversation_lines = []
+    has_assistant_turn = False
     for message in session_messages:
         label = "Student" if message.sender == ChatMessage.Sender.STUDENT else "Assistant"
+        if message.sender == ChatMessage.Sender.ASSISTANT:
+            has_assistant_turn = True
         conversation_lines.append(f"{label}: {message.content}")
 
-    return prompt_template.format(role=role_text) + "\n" + "\n".join(conversation_lines)
+    state_guardrail = ""
+    if has_assistant_turn:
+        state_guardrail = (
+            "\n\nSession state note:\n"
+            "- The conversation has already started.\n"
+            "- Do not repeat any initial greeting, setup script, or first-turn introduction.\n"
+            "- Continue naturally from the latest student message.\n"
+        )
+
+    return prompt_template.format(role=role_text) + state_guardrail + "\n" + "\n".join(conversation_lines)
 
 
 def _load_api_key_from_txt():
