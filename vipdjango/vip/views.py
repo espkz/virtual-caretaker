@@ -32,33 +32,160 @@ from .models import ChatMessage, ChatSession, RolePrompt
 base
 """
 
+DEFAULT_META_INSTRUCTIONS = (
+    "Do not play both sides. Stay in character. "
+    "Do not restart the introduction once conversation has begun."
+)
 
-def _build_chat_prompt(role_text, session_messages):
+
+def _split_markdown_sections(text):
+    sections = {}
+    current = ""
+    for line in (text or "").splitlines():
+        match = re.match(r"^\s*##\s+(.+?)\s*$", line)
+        if match:
+            current = _normalize_heading(match.group(1))
+            sections.setdefault(current, [])
+            continue
+        if current:
+            sections[current].append(line)
+    return {key: "\n".join(value).strip() for key, value in sections.items()}
+
+
+def _section_by_aliases(sections, aliases):
+    normalized = {key: value for key, value in sections.items()}
+
+    # Pass 1: exact match only.
+    for alias in aliases:
+        alias = _normalize_heading(alias)
+        if alias in normalized:
+            return normalized[alias]
+
+    # Pass 2: ranked prefix match (prefer non-voice variants).
+    best_value = ""
+    best_score = None
+    for alias in aliases:
+        alias = _normalize_heading(alias)
+        alias_tokens = alias.split()
+        for key, value in normalized.items():
+            key_tokens = key.split()
+            if len(key_tokens) < len(alias_tokens):
+                continue
+            if key_tokens[: len(alias_tokens)] != alias_tokens:
+                continue
+            extra_tokens = key_tokens[len(alias_tokens) :]
+            penalty = 5 if ("voice" in extra_tokens and "voice" not in alias_tokens) else 0
+            score = len(extra_tokens) + penalty
+            if best_score is None or score < best_score:
+                best_score = score
+                best_value = value
+    return best_value
+
+
+def _normalize_heading(text):
+    value = re.sub(r"\(optional\)", "", (text or ""), flags=re.IGNORECASE)
+    value = value.strip().lower()
+    value = value.replace("&", " and ")
+    value = re.sub(r"[^a-z0-9]+", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _extract_template_prefix():
     prompt_template_path = Path(settings.BASE_DIR).parent / "prompts" / "prompt_template.md"
     if prompt_template_path.exists():
         prompt_template = prompt_template_path.read_text(encoding="utf-8")
     else:
-        prompt_template = "{role}\n\nConversation:\n"
+        prompt_template = ""
+    if "{role}" in prompt_template:
+        return prompt_template.split("{role}", 1)[0].strip()
+    return prompt_template.strip()
 
+
+def _parse_role_config(role_text):
+    sections = _split_markdown_sections(role_text)
+    role = _section_by_aliases(sections, ["role", "role summary", "character"])
+    learner_role = _section_by_aliases(sections, ["learner role", "user role"])
+    voice_gender = (_section_by_aliases(sections, ["voice gender", "voice"]) or "female").lower().strip()
+    if voice_gender not in {"male", "female"}:
+        merged = f"{role_text}\n{_section_by_aliases(sections, ['introduction'])}"
+        voice_gender = "male" if "male voice" in merged.lower() else "female"
+    voice_style = _section_by_aliases(sections, ["voice style", "voice instructions"]) or "speak naturally and clearly"
+    intro_voice_gender = (
+        _section_by_aliases(sections, ["introduction voice gender", "intro voice gender"]) or voice_gender
+    ).lower().strip()
+    if intro_voice_gender not in {"male", "female"}:
+        intro_voice_gender = voice_gender
+    intro_voice_style = (
+        _section_by_aliases(sections, ["introduction voice style", "intro voice style"]) or voice_style
+    )
+    return {
+        "role": role or role_text.strip(),
+        "learner_role": learner_role or "nursing student",
+        "voice_gender": voice_gender,
+        "voice_style": voice_style.strip(),
+        "intro_voice_gender": intro_voice_gender,
+        "intro_voice_style": intro_voice_style.strip(),
+        "introduction": _section_by_aliases(sections, ["introduction", "introduction: greeting"]),
+        "opening_line": _section_by_aliases(sections, ["opening line"]),
+        "beginning": _section_by_aliases(sections, ["beginning", "conversation progression: beginning"]),
+        "middle": _section_by_aliases(sections, ["middle", "conversation progression: middle"]),
+        "ending": _section_by_aliases(sections, ["ending", "end", "conversation progression: end"]),
+        "closing": _section_by_aliases(sections, ["closing", "final response"]),
+        "meta": _section_by_aliases(sections, ["meta instructions", "meta instruction", "meta-instructions", "notes"]),
+        "begin_cues": _section_by_aliases(
+            sections,
+            ["beginning to middle cues", "begin-to-middle cues", "middle trigger", "middle triggers", "trigger"],
+        ),
+        "end_cues": _section_by_aliases(
+            sections,
+            ["middle to ending cues", "middle-to-ending cues", "ending trigger", "ending triggers"],
+        ),
+    }
+
+
+def _parse_cues(text):
+    if not text:
+        return []
+    cues = []
+    for raw in text.splitlines():
+        line = raw.strip().lstrip("-").strip().lower()
+        if not line:
+            continue
+        if "," in line:
+            cues.extend([part.strip() for part in line.split(",") if part.strip()])
+        else:
+            cues.append(line)
+    return cues
+
+
+def _enforce_voice_format(text, voice_gender, voice_style):
+    text = (text or "").strip()
+    if not text:
+        return f"[{voice_gender} voice, {voice_style}]"
+    if "[" not in text or "]" not in text:
+        return f"{text}\n\n[{voice_gender} voice, {voice_style}]"
+    found = re.findall(r"\[([^\]]+)\]", text, flags=re.DOTALL)
+    if not found:
+        return f"{text}\n\n[{voice_gender} voice, {voice_style}]"
+    last = found[-1].lower()
+    if "male voice" not in last and "female voice" not in last:
+        return re.sub(
+            r"\[([^\]]+)\]\s*$",
+            f"[{voice_gender} voice, {found[-1].strip()}]",
+            text,
+            count=1,
+            flags=re.DOTALL,
+        )
+    return text
+
+
+def _conversation_history_text(session_messages):
+    
     conversation_lines = []
-    has_assistant_turn = False
     for message in session_messages:
         label = "Student" if message.sender == ChatMessage.Sender.STUDENT else "Assistant"
-        if message.sender == ChatMessage.Sender.ASSISTANT:
-            has_assistant_turn = True
         conversation_lines.append(f"{label}: {message.content}")
-
-    state_guardrail = ""
-    if has_assistant_turn:
-        state_guardrail = (
-            "\n\nSession state note:\n"
-            "- The conversation has already started.\n"
-            "- Do not repeat any initial greeting, setup script, or first-turn introduction.\n"
-            "- Continue naturally from the latest student message.\n"
-        )
-
-    return prompt_template.format(role=role_text) + state_guardrail + "\n" + "\n".join(conversation_lines)
-
+    return "\n".join(conversation_lines).strip()
 
 def _load_api_key_from_txt():
     # Preferred: environment variable for deployment safety.
@@ -87,23 +214,188 @@ def _clean_for_tts(text):
     return re.sub(r"\([^)]*\)", "", text).strip()
 
 
+def _normalize_for_close_match(text):
+    value = (text or "").lower()
+    value = re.sub(r"\[[^\]]*\]", " ", value)
+    value = re.sub(r"[^a-z0-9\s]", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
 def _generate_assistant_response(role_text, session_messages):
     api_key = _load_api_key_from_txt()
     if not api_key:
-        return "OpenAI API key is not configured on the server yet."
+        return "OpenAI API key is not configured on the server yet.", False, {"stage": "error", "reason": "missing_api_key"}
 
     try:
         from openai import OpenAI
 
         client = OpenAI(api_key=api_key)
-        prompt = _build_chat_prompt(role_text, session_messages)
+        config = _parse_role_config(role_text)
+        meta_instructions = (config.get("meta") or "").strip() or DEFAULT_META_INSTRUCTIONS
+        template_prefix = _extract_template_prefix()
+        history = _conversation_history_text(session_messages)
+        assistant_count = sum(1 for m in session_messages if m.sender == ChatMessage.Sender.ASSISTANT)
+        last_user = ""
+        for message in reversed(session_messages):
+            if message.sender == ChatMessage.Sender.STUDENT:
+                last_user = message.content.strip().lower()
+                break
+
+        close_phrases = [
+            "thank you",
+            "thanks",
+            "goodbye",
+            "bye",
+            "that is all",
+            "no that's all",
+            "no, that's all",
+            "nothing else",
+            "we're done",
+            "that covers everything",
+        ]
+        should_close = any(p in last_user for p in close_phrases)
+        begin_to_middle_cues = _parse_cues(config["begin_cues"]) or [
+            "home",
+            "medication",
+            "medicine",
+            "daily",
+            "routine",
+            "help",
+            "support",
+            "safety",
+            "family",
+            "caregiver",
+            "hospice",
+            "feeding",
+            "pain",
+        ]
+        middle_to_ending_cues = _parse_cues(config["end_cues"]) or [
+            "anything else",
+            "before we finish",
+            "summarize",
+            "wrap up",
+            "closing",
+            "goodbye",
+            "thanks",
+            "stop conversation",
+            "end conversation",
+            "finish this conversation",
+        ]
+        ending_intent_phrases = [
+            "i want to stop",
+            "can we stop",
+            "let's stop",
+            "i want to end this",
+            "end this conversation",
+            "stop this conversation",
+            "we can end here",
+            "i think we're done for now",
+        ]
+
+        user_history = " ".join(
+            m.content.strip().lower() for m in session_messages if m.sender == ChatMessage.Sender.STUDENT
+        )
+        has_middle_signal = any(c in user_history for c in begin_to_middle_cues)
+        has_ending_signal = any(c in user_history for c in middle_to_ending_cues)
+        has_ending_intent = any(p in last_user for p in ending_intent_phrases)
+
+        stage = "beginning"
+        if assistant_count == 0:
+            stage = "intro"
+        elif has_ending_signal or has_ending_intent:
+            stage = "ending"
+        elif has_middle_signal:
+            stage = "middle"
+
+        if should_close:
+            stage = "closing"
+
+        if stage == "intro":
+            intro = config["introduction"] or "Hello, I am ready to begin this roleplay."
+            return _enforce_voice_format(
+                intro,
+                config["intro_voice_gender"],
+                config["intro_voice_style"],
+            ), False, {"stage": stage, "reason": "first_assistant_turn"}
+
+        if stage == "beginning" and assistant_count == 1 and config["opening_line"]:
+            return _enforce_voice_format(
+                config["opening_line"],
+                config["voice_gender"],
+                config["voice_style"],
+            ), False, {"stage": stage, "reason": "hardcoded_opening_line"}
+
+        if stage == "closing":
+            closing = config["closing"] or (
+                "Thank you for this conversation. I appreciate your help today."
+            )
+            return _enforce_voice_format(closing, config["voice_gender"], config["voice_style"]), True, {
+                "stage": stage,
+                "reason": "closing_stage_selected",
+            }
+
+        stage_instructions = config.get(stage, "") or config["middle"] or config["role"]
+        system_prompt = (
+            f"{template_prefix}\n\n"
+            "You are a standardized roleplay participant in a structured state-machine conversation.\n"
+            "Do not play both sides.\n"
+            "Do not restart introduction.\n"
+            f"Learner role: {config['learner_role']}\n"
+            f"Voice must be bracketed with '{config['voice_gender']} voice'.\n"
+            f"Meta instructions:\n{meta_instructions}\n"
+            "Output format:\n"
+            "Dialogue\n\n"
+            f"[{config['voice_gender']} voice, style instructions]"
+        )
+        user_prompt = (
+            f"Character profile:\n{config['role']}\n\n"
+            f"Current stage: {stage}\n"
+            f"Stage instructions:\n{stage_instructions}\n\n"
+            f"Conversation so far:\n{history}\n\n"
+            "Respond in character."
+        )
         response = client.responses.create(
             model="gpt-4o-mini",
-            input=[{"role": "user", "content": prompt}],
+            input=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
         )
-        return response.output_text or "The assistant returned an empty response."
+        text = response.output_text or "The assistant returned an empty response."
+        assistant_text = _enforce_voice_format(text, config["voice_gender"], config["voice_style"])
+
+        # Auto-close once the assistant has delivered the concluding line/content.
+        assistant_dialogue, _ = _parse_dialogue_and_emotion(assistant_text)
+        assistant_norm = _normalize_for_close_match(assistant_dialogue)
+        configured_closing_norm = _normalize_for_close_match(config.get("closing", ""))
+        close_markers = [
+            "thank you for this conversation",
+            "thank you for engaging with virtual conversation simulation",
+            "please remember to download your conversation record",
+            "goodbye",
+            "take care",
+        ]
+        content_signals_close = False
+        if configured_closing_norm and (
+            configured_closing_norm in assistant_norm or assistant_norm in configured_closing_norm
+        ):
+            content_signals_close = True
+        elif any(marker in assistant_norm for marker in close_markers):
+            content_signals_close = True
+
+        should_auto_close = should_close or (stage in {"ending", "closing"} and content_signals_close)
+        return assistant_text, should_auto_close, {
+            "stage": stage,
+            "assistant_count": assistant_count,
+            "has_middle_signal": has_middle_signal,
+            "has_ending_signal": has_ending_signal,
+            "has_ending_intent": has_ending_intent,
+            "user_requested_close": should_close,
+            "content_signals_close": content_signals_close,
+            "reason": "late_stage_close_signal" if should_auto_close else "continue",
+        }
     except Exception as exc:
-        return f"Assistant error: {exc}"
+        return f"Assistant error: {exc}", False, {"stage": "error", "reason": str(exc)}
 
 
 def _clean_name_part(value):
@@ -283,7 +575,7 @@ def professor_dashboard(request):
         return redirect("vip:home")
 
     current_tab = request.GET.get("tab", "prompts")
-    if current_tab not in {"prompts", "logs"}:
+    if current_tab not in {"prompts", "logs", "test_chat"}:
         current_tab = "prompts"
 
     prompts = RolePrompt.objects.order_by("-updated_at")
@@ -335,6 +627,21 @@ def professor_download_prompt_txt(request, prompt_id):
 
 
 @login_required
+def professor_download_prompt_template(request):
+    if not _is_professor(request.user):
+        return redirect("vip:home")
+
+    template_path = Path(settings.BASE_DIR).parent / "prompts" / "role_prompt_fillable.md"
+    if not template_path.exists():
+        return HttpResponseBadRequest("Template file not found.")
+
+    content = template_path.read_text(encoding="utf-8")
+    response = HttpResponse(content, content_type="text/plain; charset=utf-8")
+    response["Content-Disposition"] = 'attachment; filename="role_prompt_template.md"'
+    return response
+
+
+@login_required
 @require_POST
 def professor_upload_prompt_file(request):
     if not _is_professor(request.user):
@@ -351,9 +658,20 @@ def professor_upload_prompt_file(request):
         return HttpResponseBadRequest("File must be UTF-8 text.")
 
     title = form.cleaned_data["title"].strip() if form.cleaned_data["title"] else Path(uploaded.name).stem
-    RolePrompt.objects.create(
+    parsed_initial = RolePromptForm.initial_from_content(
+        content,
         title=title or "Uploaded Prompt",
-        content=content,
+        is_active=form.cleaned_data["is_active"],
+    )
+    structured_form = RolePromptForm(parsed_initial)
+    if structured_form.is_valid():
+        structured_content = structured_form.render_markdown_content()
+    else:
+        structured_content = content
+
+    RolePrompt.objects.create(
+        title=parsed_initial["title"] or "Uploaded Prompt",
+        content=structured_content,
         created_by=request.user,
         is_active=form.cleaned_data["is_active"],
     )
@@ -550,10 +868,12 @@ def create_prompt(request):
     if request.method == "POST":
         form = RolePromptForm(request.POST)
         if form.is_valid():
-            new_prompt = form.save(commit=False)
-            new_prompt.created_by = request.user
-
-            new_prompt.save()
+            RolePrompt.objects.create(
+                title=form.cleaned_data["title"],
+                content=form.render_markdown_content(),
+                created_by=request.user,
+                is_active=form.cleaned_data["is_active"],
+            )
             return redirect("vip:professor_dashboard")
     else:
         form = RolePromptForm()
@@ -572,12 +892,15 @@ def edit_prompt(request, prompt_id):
     prompt = get_object_or_404(RolePrompt, pk=prompt_id)
 
     if request.method == "POST":
-        form = RolePromptForm(request.POST, instance=prompt)
+        form = RolePromptForm(request.POST)
         if form.is_valid():
-            form.save()
+            prompt.title = form.cleaned_data["title"]
+            prompt.is_active = form.cleaned_data["is_active"]
+            prompt.content = form.render_markdown_content()
+            prompt.save(update_fields=["title", "is_active", "content", "updated_at"])
             return redirect("vip:professor_dashboard")
     else:
-        form = RolePromptForm(instance=prompt)
+        form = RolePromptForm(initial=RolePromptForm.initial_from_prompt(prompt))
 
     return render(
         request,
@@ -617,6 +940,9 @@ def delete_prompt(request, prompt_id):
         return redirect("vip:home")
 
     prompt = get_object_or_404(RolePrompt, pk=prompt_id)
+    # Close any active sessions using this prompt before deletion so students
+    # don't continue a conversation with a removed prompt.
+    ChatSession.objects.filter(role_prompt=prompt, ended_at__isnull=True).update(ended_at=timezone.now())
     prompt.delete()
     return redirect(f"{reverse('vip:professor_dashboard')}?tab=prompts")
 
@@ -701,6 +1027,196 @@ def professor_reset_all_student_logs(request):
     student_ids = _student_queryset().values_list("id", flat=True)
     ChatSession.objects.filter(student_id__in=student_ids).delete()
     return redirect(f"{reverse('vip:professor_dashboard')}?tab=logs")
+
+
+@login_required
+def professor_test_chat(request):
+    if not _is_professor(request.user):
+        return redirect("vip:home")
+
+    active_prompts = RolePrompt.objects.filter(is_active=True).order_by("title")
+    sessions = (
+        ChatSession.objects.filter(student=request.user)
+        .select_related("role_prompt")
+        .prefetch_related("messages")
+        .order_by("-started_at")
+    )
+
+    selected_prompt = None
+    selected_prompt_id = request.POST.get("prompt_id") or request.GET.get("prompt")
+    if selected_prompt_id:
+        selected_prompt = active_prompts.filter(pk=selected_prompt_id).first()
+    if not selected_prompt:
+        selected_prompt = active_prompts.first()
+
+    start_new = request.GET.get("new") == "1"
+    force_new = request.POST.get("force_new") == "1" or request.GET.get("force_new") == "1"
+    current_session = None
+    session_id = request.POST.get("session_id") or request.GET.get("session")
+    if session_id:
+        current_session = get_object_or_404(
+            ChatSession.objects.filter(student=request.user).select_related("role_prompt"),
+            pk=session_id,
+        )
+    elif not start_new and selected_prompt:
+        current_session = sessions.filter(role_prompt=selected_prompt).first()
+
+    error_message = None
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "new_session":
+            target = reverse("vip:professor_test_chat")
+            if selected_prompt:
+                target += f"?prompt={selected_prompt.id}&new=1&force_new=1"
+            return redirect(target)
+
+        if action == "delete_session":
+            target_session_id = request.POST.get("target_session_id") or request.POST.get("session_id")
+            if target_session_id:
+                session_to_delete = get_object_or_404(ChatSession, pk=target_session_id, student=request.user)
+                session_to_delete.delete()
+            target = reverse("vip:professor_test_chat")
+            if selected_prompt:
+                target += f"?prompt={selected_prompt.id}&new=1"
+            return redirect(target)
+
+        if action == "close_conversation":
+            if current_session and current_session.ended_at is None:
+                current_session.ended_at = timezone.now()
+                current_session.save(update_fields=["ended_at"])
+            target = reverse("vip:professor_test_chat")
+            if selected_prompt:
+                target += f"?prompt={selected_prompt.id}&new=1"
+            return redirect(target)
+
+        if action == "send_message":
+            user_text = request.POST.get("message", "").strip()
+            if not selected_prompt:
+                error_message = "No active prompt is available. Activate at least one prompt first."
+            elif not user_text:
+                error_message = "Please type a message before sending."
+            else:
+                if (
+                    not current_session
+                    or current_session.role_prompt_id != selected_prompt.id
+                    or current_session.ended_at is not None
+                    or force_new
+                ):
+                    current_session = None
+                    if not force_new:
+                        current_session = (
+                            ChatSession.objects.filter(
+                                student=request.user,
+                                role_prompt=selected_prompt,
+                                ended_at__isnull=True,
+                            )
+                            .order_by("-started_at")
+                            .first()
+                        )
+                    if current_session is None:
+                        current_session = ChatSession.objects.create(
+                            student=request.user,
+                            role_prompt=selected_prompt,
+                        )
+                else:
+                    latest_message = current_session.messages.order_by("-created_at").first()
+                    if latest_message and latest_message.sender == ChatMessage.Sender.STUDENT:
+                        error_message = "Please wait for the AI response before sending another message."
+
+                if error_message:
+                    current_messages = []
+                    if current_session:
+                        current_messages = current_session.messages.order_by("created_at")
+                    rendered_messages = []
+                    for message in current_messages:
+                        display_content = message.content
+                        if message.sender == ChatMessage.Sender.ASSISTANT:
+                            display_content, _ = _parse_dialogue_and_emotion(message.content)
+                        rendered_messages.append(
+                            {
+                                "id": message.id,
+                                "sender": message.sender,
+                                "sender_display": "AI" if message.sender == ChatMessage.Sender.ASSISTANT else "Professor",
+                                "created_at": message.created_at,
+                                "display_content": display_content,
+                            }
+                        )
+                    return render(
+                        request,
+                        "vip/professor_test_chat.html",
+                        {
+                            "active_prompts": active_prompts,
+                            "selected_prompt": selected_prompt,
+                            "sessions": sessions,
+                            "current_session": current_session,
+                            "rendered_messages": rendered_messages,
+                            "error_message": error_message,
+                            "force_new": force_new,
+                        },
+                    )
+
+                ChatMessage.objects.create(
+                    session=current_session,
+                    sender=ChatMessage.Sender.STUDENT,
+                    content=user_text,
+                )
+
+                session_messages = current_session.messages.order_by("created_at")
+                assistant_text, should_auto_close, debug_info = _generate_assistant_response(
+                    selected_prompt.content,
+                    session_messages,
+                )
+                ChatMessage.objects.create(
+                    session=current_session,
+                    sender=ChatMessage.Sender.ASSISTANT,
+                    content=assistant_text,
+                )
+                print(
+                    "[CHAT DEBUG]",
+                    f"user={request.user.username}",
+                    f"session={current_session.id}",
+                    f"stage={debug_info.get('stage')}",
+                    f"auto_close={should_auto_close}",
+                    f"reason={debug_info.get('reason')}",
+                )
+                if should_auto_close and current_session.ended_at is None:
+                    current_session.ended_at = timezone.now()
+                    current_session.save(update_fields=["ended_at"])
+                return redirect(
+                    f"{reverse('vip:professor_test_chat')}?prompt={selected_prompt.id}&session={current_session.id}&autoplay=1"
+                )
+
+    current_messages = []
+    if current_session:
+        current_messages = current_session.messages.order_by("created_at")
+    rendered_messages = []
+    for message in current_messages:
+        display_content = message.content
+        if message.sender == ChatMessage.Sender.ASSISTANT:
+            display_content, _ = _parse_dialogue_and_emotion(message.content)
+        rendered_messages.append(
+            {
+                "id": message.id,
+                "sender": message.sender,
+                "sender_display": "AI" if message.sender == ChatMessage.Sender.ASSISTANT else "Professor",
+                "created_at": message.created_at,
+                "display_content": display_content,
+            }
+        )
+
+    return render(
+        request,
+        "vip/professor_test_chat.html",
+        {
+            "active_prompts": active_prompts,
+            "selected_prompt": selected_prompt,
+            "sessions": sessions,
+            "current_session": current_session,
+            "rendered_messages": rendered_messages,
+            "error_message": error_message,
+            "force_new": force_new,
+        },
+    )
 
 
 """
@@ -829,12 +1345,26 @@ def student_dashboard(request):
                 )
 
                 session_messages = current_session.messages.order_by("created_at")
-                assistant_text = _generate_assistant_response(selected_prompt.content, session_messages)
+                assistant_text, should_auto_close, debug_info = _generate_assistant_response(
+                    selected_prompt.content,
+                    session_messages,
+                )
                 ChatMessage.objects.create(
                     session=current_session,
                     sender=ChatMessage.Sender.ASSISTANT,
                     content=assistant_text,
                 )
+                print(
+                    "[CHAT DEBUG]",
+                    f"user={request.user.username}",
+                    f"session={current_session.id}",
+                    f"stage={debug_info.get('stage')}",
+                    f"auto_close={should_auto_close}",
+                    f"reason={debug_info.get('reason')}",
+                )
+                if should_auto_close and current_session.ended_at is None:
+                    current_session.ended_at = timezone.now()
+                    current_session.save(update_fields=["ended_at"])
                 return redirect(
                     f"{reverse('vip:student_dashboard')}?prompt={selected_prompt.id}&session={current_session.id}&autoplay=1"
                 )
@@ -874,7 +1404,7 @@ def student_dashboard(request):
 
 @login_required
 def student_download_session(request, session_id):
-    if not _is_student(request.user):
+    if not (_is_student(request.user) or _is_professor(request.user)):
         return redirect("vip:home")
 
     session = get_object_or_404(
@@ -903,7 +1433,7 @@ def student_download_session(request, session_id):
 
 @login_required
 def student_message_tts(request, message_id):
-    if not _is_student(request.user):
+    if not (_is_student(request.user) or _is_professor(request.user)):
         return redirect("vip:home")
 
     message = get_object_or_404(

@@ -5,10 +5,7 @@
 
 <style>
     .prompt-layout {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 18px;
-        align-items: start;
+        display: block;
     }
 
     .panel {
@@ -22,6 +19,34 @@
         margin-top: 0;
     }
 
+    .tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+    }
+
+    .tab-btn {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 10px;
+        background: #f8fafc;
+        cursor: pointer;
+    }
+
+    .tab-btn.active {
+        background: #e2e8f0;
+        font-weight: 600;
+    }
+
+    .tab-panel {
+        display: none;
+    }
+
+    .tab-panel.active {
+        display: block;
+    }
+
     .field {
         margin-bottom: 12px;
     }
@@ -33,6 +58,7 @@
     }
 
     .field input[type="text"],
+    .field select,
     .field textarea {
         width: 100%;
         border: 1px solid var(--border);
@@ -42,7 +68,7 @@
     }
 
     .field textarea {
-        min-height: 420px;
+        min-height: 80px;
         resize: vertical;
     }
 
@@ -80,16 +106,25 @@
         font-size: 0.9rem;
     }
 
-    @media (max-width: 900px) {
-        .prompt-layout {
-            grid-template-columns: 1fr;
-        }
+    .md-source {
+        white-space: pre-wrap;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #f8fafc;
+        padding: 12px;
+        min-height: 220px;
     }
 </style>
 
 <div class="prompt-layout">
     <section class="panel">
-        <h2>Prompt Editor</h2>
+        <h2>Prompt Builder</h2>
+        <div class="tabs">
+            <button type="button" class="tab-btn active" data-tab="builder-tab">Builder</button>
+            <button type="button" class="tab-btn" data-tab="preview-tab">Live Preview</button>
+            <button type="button" class="tab-btn" data-tab="markdown-tab">Full Markdown</button>
+        </div>
         <form method="post">
             {% csrf_token %}
 
@@ -99,39 +134,117 @@
             </div>
             {% endif %}
 
-            <div class="field">
-                <label for="{{ form.title.id_for_label }}">Title</label>
-                {{ form.title }}
-                {% if form.title.errors %}
-                <div class="errors">{{ form.title.errors }}</div>
-                {% endif %}
+            <div class="tab-panel active" id="builder-tab">
+                <div class="field">
+                    <label for="{{ form.title.id_for_label }}">Title</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}
+                    <div class="errors">{{ form.title.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.role.id_for_label }}">Role</label>
+                    {{ form.role }}
+                    {% if form.role.errors %}
+                    <div class="errors">{{ form.role.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.learner_role.id_for_label }}">Learner Role</label>
+                    {{ form.learner_role }}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.voice_gender.id_for_label }}">Voice Gender</label>
+                    {{ form.voice_gender }}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.voice_style.id_for_label }}">Voice Style</label>
+                    {{ form.voice_style }}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.intro_voice_gender.id_for_label }}">Introduction Voice Gender (Optional)</label>
+                    {{ form.intro_voice_gender }}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.intro_voice_style.id_for_label }}">Introduction Voice Style (Optional)</label>
+                    {{ form.intro_voice_style }}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.introduction.id_for_label }}">Introduction</label>
+                    {{ form.introduction }}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.opening_line.id_for_label }}">Opening Line (Optional)</label>
+                    {{ form.opening_line }}
+                    {% if form.opening_line.help_text %}
+                    <p class="preview-note">{{ form.opening_line.help_text }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.beginning.id_for_label }}">Beginning</label>
+                    {{ form.beginning }}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.begin_to_middle_cues.id_for_label }}">Beginning to Middle Cues</label>
+                    {{ form.begin_to_middle_cues }}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.middle.id_for_label }}">Middle</label>
+                    {{ form.middle }}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.middle_to_ending_cues.id_for_label }}">Middle to Ending Cues</label>
+                    {{ form.middle_to_ending_cues }}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.ending.id_for_label }}">Ending</label>
+                    {{ form.ending }}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.closing.id_for_label }}">Closing (Optional)</label>
+                    {{ form.closing }}
+                    {% if form.closing.help_text %}
+                    <p class="preview-note">{{ form.closing.help_text }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.meta_instructions.id_for_label }}">Meta Instructions</label>
+                    {{ form.meta_instructions }}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.is_active.id_for_label }}">{{ form.is_active }} Active</label>
+                </div>
             </div>
 
-            <div class="field">
-                <label for="{{ form.content.id_for_label }}">Content (Markdown)</label>
-                {{ form.content }}
-                {% if form.content.errors %}
-                <div class="errors">{{ form.content.errors }}</div>
-                {% endif %}
+            <div class="tab-panel" id="preview-tab">
+                <h3>Rendered Preview</h3>
+                <div id="md-preview" class="preview-content"></div>
+                <p class="preview-note">Preview updates as you edit builder fields.</p>
             </div>
 
-            <div class="field">
-                <label for="{{ form.is_active.id_for_label }}">
-                    {{ form.is_active }} Active
-                </label>
-                {% if form.is_active.errors %}
-                <div class="errors">{{ form.is_active.errors }}</div>
-                {% endif %}
+            <div class="tab-panel" id="markdown-tab">
+                <h3>Generated Markdown</h3>
+                <div id="md-source" class="md-source"></div>
             </div>
 
             <button type="submit">Save Prompt</button>
         </form>
-    </section>
-
-    <section class="panel">
-        <h2>Live Preview</h2>
-        <div id="md-preview" class="preview-content"></div>
-        <p class="preview-note">Preview updates as you type.</p>
     </section>
 </div>
 
@@ -141,28 +254,88 @@
 
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script>
-    const textarea = document.getElementById("id_content");
+    const fieldIds = [
+        "id_role",
+        "id_learner_role",
+        "id_voice_gender",
+        "id_voice_style",
+        "id_intro_voice_gender",
+        "id_intro_voice_style",
+        "id_introduction",
+        "id_opening_line",
+        "id_beginning",
+        "id_begin_to_middle_cues",
+        "id_middle",
+        "id_middle_to_ending_cues",
+        "id_ending",
+        "id_closing",
+        "id_meta_instructions",
+    ];
     const preview = document.getElementById("md-preview");
+    const sourceView = document.getElementById("md-source");
 
-    function escapeHtml(text) {
-        return text
-            .replaceAll("&", "&amp;")
-            .replaceAll("<", "&lt;")
-            .replaceAll(">", "&gt;");
+    function getValue(id) {
+        const el = document.getElementById(id);
+        if (!el) return "";
+        return (el.value || "").trim();
+    }
+
+    function section(title, value) {
+        if (!value) return "";
+        return "## " + title + "\n" + value + "\n\n";
+    }
+
+    function toMarkdown() {
+        return (
+            section("Role", getValue("id_role")) +
+            section("Learner Role", getValue("id_learner_role")) +
+            section("Voice Gender", getValue("id_voice_gender")) +
+            section("Voice Style", getValue("id_voice_style")) +
+            section("Introduction Voice Gender", getValue("id_intro_voice_gender")) +
+            section("Introduction Voice Style", getValue("id_intro_voice_style")) +
+            section("Introduction", getValue("id_introduction")) +
+            section("Opening Line", getValue("id_opening_line")) +
+            section("Beginning", getValue("id_beginning")) +
+            section("Beginning to Middle Cues", getValue("id_begin_to_middle_cues")) +
+            section("Middle", getValue("id_middle")) +
+            section("Middle to Ending Cues", getValue("id_middle_to_ending_cues")) +
+            section("Ending", getValue("id_ending")) +
+            section("Closing", getValue("id_closing")) +
+            section("Meta Instructions", getValue("id_meta_instructions"))
+        ).trim();
     }
 
     function renderPreview() {
-        const source = textarea ? textarea.value : "";
+        const source = toMarkdown();
+        if (sourceView) {
+            sourceView.textContent = source;
+        }
         if (window.marked && typeof window.marked.parse === "function") {
             preview.innerHTML = window.marked.parse(source);
         } else {
-            preview.innerHTML = "<pre>" + escapeHtml(source) + "</pre>";
+            preview.textContent = source;
         }
     }
 
-    if (textarea) {
-        textarea.addEventListener("input", renderPreview);
-        renderPreview();
-    }
+    fieldIds.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener("input", renderPreview);
+            el.addEventListener("change", renderPreview);
+        }
+    });
+    renderPreview();
+
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+            document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
+            btn.classList.add("active");
+            const target = document.getElementById(btn.dataset.tab);
+            if (target) {
+                target.classList.add("active");
+            }
+        });
+    });
 </script>
 {% endblock %}

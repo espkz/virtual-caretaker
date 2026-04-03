@@ -55,6 +55,7 @@
 <nav class="tabs">
     <a class="tab-link {% if current_tab == 'prompts' %}active{% endif %}" href="{% url 'vip:professor_dashboard' %}?tab=prompts">Prompts</a>
     <a class="tab-link {% if current_tab == 'logs' %}active{% endif %}" href="{% url 'vip:professor_dashboard' %}?tab=logs">Student Logs</a>
+    <a class="tab-link {% if current_tab == 'test_chat' %}active{% endif %}" href="{% url 'vip:professor_test_chat' %}">Test Chat</a>
     <a class="tab-link" href="{% url 'vip:professor_manage_accounts' %}">Student Accounts</a>
 </nav>
 
@@ -112,6 +113,7 @@
 {% endif %}
 
 <p><a href="{% url 'vip:create_prompt' %}">Add New Prompt</a></p>
+<p><a href="{% url 'vip:professor_download_prompt_template' %}">Download Prompt Template (.md)</a></p>
 <h3>Upload Prompt File</h3>
 <p class="muted">Upload a <code>.txt</code> or <code>.md</code> file to create a new prompt.</p>
 <form method="post" action="{% url 'vip:professor_upload_prompt_file' %}" enctype="multipart/form-data">
@@ -163,5 +165,11 @@
 {% else %}
 <p>No student users found in Student or Class groups.</p>
 {% endif %}
+{% endif %}
+
+{% if current_tab == "test_chat" %}
+<h2>Test Chat</h2>
+<p>Use the professor test interface to run roleplay chats as an instructor and verify prompt behavior.</p>
+<p><a href="{% url 'vip:professor_test_chat' %}">Open Test Chat</a></p>
 {% endif %}
 {% endblock %}
