@@ -4,6 +4,5 @@ env.txt
 **/__pycache__/
 *.pyc
 vipdjango/db.sqlite3
-backend.py
 scratch.py
 update.sh
