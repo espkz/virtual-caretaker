@@ -1,36 +1,80 @@
-# Virtual Caretaker Chatbot
-Simple LLM-integrated chatbot for student nurses practicing speaking to patients and their caretakers
+# Virtual Caretaker
 
-`for any inquiries, please contact me through Github`
+Virtual patient/caregiver roleplay platform for nursing education.
 
-## How to Use
-1. Input GPT API key to the left.
- - Refreshing will result in the key being erased as well. If you're resetting, make sure to put in the key first.
-2. Begin speaking with the chatbot.
-   - You may adjust the role prompt (to the left).
-   - Chat input can be done with voice or text
-3. Save conversation if you feel like you're done. The chatbot may continue speaking (see Known Issues).
+Main app stack is now **Django**.
 
-## Known Issues
-- Conversation may not properly end
-- Streamlit latency
-- Emotion module sounds excited when it's supposed to sound sad
+## How It Works
 
-## TODO
-- Minimize latency (AWS requires security review, possible non-AWS option?)
-- More mid-dialogue emotion actions (it's possible, but GPT has occasions where it just reads the stage directions)
-  - Prompt: If there is any emotion to express in the dialogue, such as bursting into tears or choking on your voice, output them in parentheses, such as (voice cracking) or (pause) or (sigh). Do NOT put any actions, such as (glancing at patient), they should be voice or emotion related. Any additional voice-based instructions such as male/female voice and voice tone should be output in brackets after the dialogue.
+There are two main account roles:
 
-## How to pull repository into SON/MathCS server
-1) Log into SON/MathCS server (caretaker VM or vip VM)
-   1) Ideally Docker/Podman is configured but if not configure Docker/Podman
-   2) The SON user may need a password that I've created, please contact me if you require it.
-2) Create directory `app/`
-3) Create Dockerfile necessary to pull repository (see Streamlit to Docker guide)
-   1) The repository must be made public for the Dockerfile to be able to pull, otherwise it requires additional authentication
-4) Build image with Dockerfile
-5) Remake/restart container if there already exists a container
+- `Instructor`:
+  - manages prompts (create, edit, activate/deactivate, delete, upload/download)
+  - creates and manages student accounts and class group assignments
+  - reviews student chat logs
+  - can use a test-chat interface to validate prompt behavior
 
-## Resources/Docs
+- `Student`:
+  - can only access active prompts assigned through the app flow
+  - chats with the roleplay assistant using text or speech input
+  - can enable/disable emotion voice behavior during TTS playback
+  - can download conversation logs
+
+## Tech Stack
+
+- Python3
+- Django
+- SQLite (default app database)
+- OpenAI API (chat generation + TTS)
+- gTTS (non-emotion TTS fallback)
+- Browser Web Speech API (STT for microphone input)
+- Podman (containerized deployment runtime)
+
+## Branches
+
+- `main`: current Django application (active branch)
+- `streamlit-v.20260430`: legacy Streamlit implementation
+
+If you need the old Streamlit code, check out the `streamlit-v.20260430` branch.
+
+## Django App Location
+
+- Project root: `vipdjango/`
+- App: `vipdjango/vip/`
+
+## Local Development (Django)
+
+1. Create/activate a virtual environment.
+2. Install requirements:
+
+```bash
+cd vipdjango
+pip install -r requirements.txt
+```
+
+3. Export env vars (example uses `env.txt` at repo root):
+
+```bash
+cd ..
+set -a
+source env.txt
+set +a
+```
+
+4. Run migrations and start dev server:
+
+```bash
+cd vipdjango
+python manage.py migrate
+python manage.py runserver 127.0.0.1:8001
+```
+
+## Notes
+
+- Prompt templates/files are under `prompts/`.
+- OpenAI key and Django settings are environment-variable based.
+
+## Resources
+
 - [OpenAI TTS](https://platform.openai.com/docs/guides/text-to-speech)
-- [Streamlit to Docker](https://docs.streamlit.io/deploy/tutorials/docker)
+- [Django Docs](https://docs.djangoproject.com/)
