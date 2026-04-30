@@ -5,3 +5,5 @@ env.txt
 *.pyc
 vipdjango/db.sqlite3
 backend.py
+scratch.py
+update.sh
