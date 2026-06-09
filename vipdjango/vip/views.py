@@ -2,6 +2,7 @@ import os
 import re
 import io
 import csv
+import logging
 from pathlib import Path
 
 from django.conf import settings
@@ -31,6 +32,8 @@ from .models import ChatMessage, ChatSession, RolePrompt
 """
 base
 """
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_META_INSTRUCTIONS = (
     "Do not play both sides. Stay in character. "
@@ -180,12 +183,12 @@ def _enforce_voice_format(text, voice_gender, voice_style):
 
 
 def _conversation_history_text(session_messages):
-    
     conversation_lines = []
     for message in session_messages:
         label = "Student" if message.sender == ChatMessage.Sender.STUDENT else "Assistant"
         conversation_lines.append(f"{label}: {message.content}")
     return "\n".join(conversation_lines).strip()
+
 
 def _load_api_key_from_txt():
     # Preferred: environment variable for deployment safety.
@@ -1171,13 +1174,13 @@ def professor_test_chat(request):
                     sender=ChatMessage.Sender.ASSISTANT,
                     content=assistant_text,
                 )
-                print(
-                    "[CHAT DEBUG]",
-                    f"user={request.user.username}",
-                    f"session={current_session.id}",
-                    f"stage={debug_info.get('stage')}",
-                    f"auto_close={should_auto_close}",
-                    f"reason={debug_info.get('reason')}",
+                logger.debug(
+                    "Chat response generated: user=%s session=%s stage=%s auto_close=%s reason=%s",
+                    request.user.username,
+                    current_session.id,
+                    debug_info.get("stage"),
+                    should_auto_close,
+                    debug_info.get("reason"),
                 )
                 if should_auto_close and current_session.ended_at is None:
                     current_session.ended_at = timezone.now()
@@ -1354,13 +1357,13 @@ def student_dashboard(request):
                     sender=ChatMessage.Sender.ASSISTANT,
                     content=assistant_text,
                 )
-                print(
-                    "[CHAT DEBUG]",
-                    f"user={request.user.username}",
-                    f"session={current_session.id}",
-                    f"stage={debug_info.get('stage')}",
-                    f"auto_close={should_auto_close}",
-                    f"reason={debug_info.get('reason')}",
+                logger.debug(
+                    "Chat response generated: user=%s session=%s stage=%s auto_close=%s reason=%s",
+                    request.user.username,
+                    current_session.id,
+                    debug_info.get("stage"),
+                    should_auto_close,
+                    debug_info.get("reason"),
                 )
                 if should_auto_close and current_session.ended_at is None:
                     current_session.ended_at = timezone.now()

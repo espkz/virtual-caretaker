@@ -1,8 +1,19 @@
+# Local secrets and environment files
 api_key.txt
-users.txt
 env.txt
-**/__pycache__/
-*.pyc
+users.txt
+
+# Local databases
 vipdjango/db.sqlite3
+
+# Python artifacts
+**/__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Local scratch scripts
 scratch.py
 update.sh
