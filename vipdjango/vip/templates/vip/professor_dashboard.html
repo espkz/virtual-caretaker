@@ -125,7 +125,7 @@
 
 {% if current_tab == "logs" %}
 <h2>Student Chat Logs</h2>
-<p><a href="{% url 'vip:professor_manage_accounts' %}">Manage Student Accounts and Class Groups</a></p>
+<p><a href="{% url 'vip:professor_manage_accounts' %}">Manage Student Accounts and Classes</a></p>
 <form method="post" action="{% url 'vip:professor_reset_all_student_logs' %}" style="margin-bottom: 12px;">
     {% csrf_token %}
     <button type="submit" onclick="return confirm('Reset all student chat logs? This deletes every saved student session.');">
@@ -163,7 +163,7 @@
 </table>
 {% endfor %}
 {% else %}
-<p>No student users found in Student or Class groups.</p>
+<p>No student accounts found for your professor account.</p>
 {% endif %}
 {% endif %}
 

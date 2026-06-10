@@ -29,7 +29,7 @@
 </style>
 
 <h1>Student Accounts</h1>
-<p class="muted">Create one account at a time or upload a spreadsheet to create many students at once. If class is blank, student will be assigned to Unassigned.</p>
+<p class="muted">Create one account at a time or upload a spreadsheet to create many students at once. Students and classes are visible only to the professor who creates them.</p>
 
 <nav class="tabs">
     <a class="tab-link" href="{% url 'vip:professor_dashboard' %}?tab=prompts">Prompts</a>
@@ -69,19 +69,19 @@
         <select id="single-class-name" name="class_name">
             <option value="" selected>Unassigned</option>
             {% for group in class_groups %}
-            <option value="{{ group.name|cut:'Class: ' }}">{{ group.name }}</option>
+            <option value="{{ group.name }}">{{ group.name }}</option>
             {% endfor %}
         </select>
     </p>
     <button type="submit">Create Student Account</button>
 </form>
 
-<h2>Create Class Group</h2>
+<h2>Create Class</h2>
 <form method="post">
     {% csrf_token %}
     <input type="hidden" name="action" value="create_class">
     {{ class_form.as_p }}
-    <button type="submit">Create Class Group</button>
+    <button type="submit">Create Class</button>
 </form>
 
 <h2>Bulk Upload</h2>
@@ -146,12 +146,12 @@
 </table>
 {% endif %}
 
-<h2>Existing Class Groups</h2>
+<h2>Existing Classes</h2>
 {% if class_groups %}
 <table>
     <thead>
         <tr>
-            <th>Class Group</th>
+            <th>Class</th>
             <th>Action</th>
         </tr>
     </thead>
@@ -164,7 +164,7 @@
                     {% csrf_token %}
                     <input type="hidden" name="action" value="delete_class">
                     <input type="hidden" name="class_group_id" value="{{ group.id }}">
-                    <button type="submit" onclick="return confirm('Delete this class group? Students will become unassigned.');">
+                    <button type="submit" onclick="return confirm('Delete this class? Students will become unassigned.');">
                         Delete Class
                     </button>
                 </form>
@@ -174,7 +174,7 @@
     </tbody>
 </table>
 {% else %}
-<p>No class groups yet. They are created automatically during account creation.</p>
+<p>No classes yet. They are created automatically during bulk account creation.</p>
 {% endif %}
 
 <h2>Student Roster</h2>

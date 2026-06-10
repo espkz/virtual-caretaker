@@ -55,3 +55,53 @@ class ChatMessage(models.Model):
 
     def __str__(self):
         return f"{self.sender} @ {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class ProfessorClass(models.Model):
+    professor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="owned_classes",
+    )
+    name = models.CharField(max_length=150)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["professor", "name"],
+                name="unique_professor_class_name",
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class ProfessorStudent(models.Model):
+    professor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="owned_students",
+    )
+    student = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="professor_assignment",
+    )
+    class_group = models.ForeignKey(
+        ProfessorClass,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="student_assignments",
+    )
+    student_number = models.CharField(max_length=30, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["student__username"]
+
+    def __str__(self):
+        return f"{self.student} assigned to {self.professor}"

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ChatMessage, ChatSession, RolePrompt
+from .models import ChatMessage, ChatSession, ProfessorClass, ProfessorStudent, RolePrompt
 
 
 @admin.register(RolePrompt)
@@ -22,3 +22,17 @@ class ChatMessageAdmin(admin.ModelAdmin):
     list_display = ("id", "session", "sender", "created_at")
     list_filter = ("sender", "created_at")
     search_fields = ("content", "session__student__username")
+
+
+@admin.register(ProfessorClass)
+class ProfessorClassAdmin(admin.ModelAdmin):
+    list_display = ("name", "professor", "created_at")
+    list_filter = ("created_at",)
+    search_fields = ("name", "professor__username")
+
+
+@admin.register(ProfessorStudent)
+class ProfessorStudentAdmin(admin.ModelAdmin):
+    list_display = ("student", "professor", "class_group", "student_number", "created_at")
+    list_filter = ("class_group", "created_at")
+    search_fields = ("student__username", "student__first_name", "student__last_name", "professor__username")

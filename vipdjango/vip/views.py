@@ -13,7 +13,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import Group
 from django.contrib.auth import update_session_auth_hash
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Max
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.text import slugify
@@ -27,7 +27,7 @@ from .forms import (
     StudentAccountCreateForm,
     StudentBulkUploadForm,
 )
-from .models import ChatMessage, ChatSession, RolePrompt
+from .models import ChatMessage, ChatSession, ProfessorClass, ProfessorStudent, RolePrompt
 
 """
 base
@@ -460,16 +460,34 @@ def _read_bulk_rows(uploaded_file):
     raise ValueError("Unsupported file type. Please upload .xlsx or .csv.")
 
 
-def _create_student_account(first_name, last_name, net_id, student_id, class_name):
+def _get_owned_class(professor, class_name):
+    normalized_class = _normalize_class_name(class_name)
+    if not normalized_class:
+        return None
+    return ProfessorClass.objects.filter(professor=professor, name=normalized_class).first()
+
+
+def _create_student_account(first_name, last_name, net_id, student_id, class_name, professor, create_class=False):
     User = get_user_model()
     username = _normalize_net_id(net_id)
     password = _build_student_password(first_name, last_name, student_id)
     normalized_class = _normalize_class_name(class_name)
+    class_group = None
 
     if not username:
         return None, "NetID is required."
     if User.objects.filter(username=username).exists():
         return None, f'NetID "{username}" already exists.'
+    if normalized_class:
+        if create_class:
+            class_group, _ = ProfessorClass.objects.get_or_create(
+                professor=professor,
+                name=normalized_class,
+            )
+        else:
+            class_group = _get_owned_class(professor, normalized_class)
+        if not class_group:
+            return None, "Please select an existing class created under your account."
 
     user = User.objects.create_user(
         username=username,
@@ -480,9 +498,12 @@ def _create_student_account(first_name, last_name, net_id, student_id, class_nam
 
     student_group, _ = Group.objects.get_or_create(name="Student")
     user.groups.add(student_group)
-    if normalized_class:
-        class_group, _ = Group.objects.get_or_create(name=f"Class: {normalized_class}")
-        user.groups.add(class_group)
+    ProfessorStudent.objects.create(
+        professor=professor,
+        student=user,
+        class_group=class_group,
+        student_number=student_id.strip(),
+    )
     return {
         "username": username,
         "password": password,
@@ -501,20 +522,16 @@ def _is_professor(user):
 def _is_student(user):
     if _is_professor(user):
         return False
-    return (
-        user.groups.filter(name__startswith="Class: ")
-        .exclude(name__iexact="Class: Unassigned")
-        .exists()
-    )
+    return user.groups.filter(name__iexact="Student").exists() or hasattr(user, "professor_assignment")
 
 
-def _student_queryset():
+def _student_queryset(professor):
     User = get_user_model()
-    return (
-        User.objects.filter(Q(groups__name__startswith="Class: ") | Q(groups__name="Student"))
-        .exclude(groups__name="Professor")
-        .distinct()
-    )
+    return User.objects.filter(professor_assignment__professor=professor).distinct()
+
+
+def _student_assignment_queryset(professor):
+    return ProfessorStudent.objects.filter(professor=professor).select_related("student", "class_group")
 
 
 @login_required
@@ -583,24 +600,21 @@ def professor_dashboard(request):
 
     prompts = RolePrompt.objects.order_by("-updated_at")
     prompt_upload_form = PromptTextUploadForm()
-    students = (
-        _student_queryset().prefetch_related("groups")
+    student_assignments = (
+        _student_assignment_queryset(request.user)
         .annotate(
-            session_count=Count("chat_sessions", distinct=True),
-            last_session_at=Max("chat_sessions__started_at"),
+            session_count=Count("student__chat_sessions", distinct=True),
+            last_session_at=Max("student__chat_sessions__started_at"),
         )
-        .order_by("username")
+        .order_by("class_group__name", "student__username")
     )
     students_by_class = {}
-    for student in students:
-        class_names = []
-        for group in student.groups.all():
-            if group.name.startswith("Class: ") and group.name.lower() != "class: unassigned":
-                class_names.append(group.name.replace("Class: ", "", 1))
-        if not class_names:
-            class_names = ["Unassigned"]
-        for class_name in class_names:
-            students_by_class.setdefault(class_name, []).append(student)
+    for assignment in student_assignments:
+        student = assignment.student
+        student.session_count = assignment.session_count
+        student.last_session_at = assignment.last_session_at
+        class_name = assignment.class_group.name if assignment.class_group else "Unassigned"
+        students_by_class.setdefault(class_name, []).append(student)
     students_by_class = [
         {"class_name": class_name, "students": students_by_class[class_name]}
         for class_name in sorted(students_by_class.keys())
@@ -686,11 +700,6 @@ def professor_manage_accounts(request):
     if not _is_professor(request.user):
         return redirect("vip:home")
 
-    legacy_unassigned_group = Group.objects.filter(name__iexact="Class: Unassigned").first()
-    if legacy_unassigned_group:
-        legacy_unassigned_group.user_set.clear()
-        legacy_unassigned_group.delete()
-
     single_form = StudentAccountCreateForm()
     bulk_form = StudentBulkUploadForm()
     class_form = ClassGroupCreateForm()
@@ -705,26 +714,19 @@ def professor_manage_accounts(request):
             single_form = StudentAccountCreateForm(request.POST)
             if single_form.is_valid():
                 selected_class = _normalize_class_name(single_form.cleaned_data["class_name"])
-                class_group = None
-                if selected_class:
-                    class_group = Group.objects.filter(name=f"Class: {selected_class}").first()
-                if selected_class and not class_group:
-                    skipped_rows.append(
-                        {"row": "Single form", "reason": "Please select an existing class group from the dropdown."}
-                    )
+                account, error = _create_student_account(
+                    first_name=single_form.cleaned_data["first_name"],
+                    last_name=single_form.cleaned_data["last_name"],
+                    net_id=single_form.cleaned_data["net_id"],
+                    student_id=single_form.cleaned_data["student_id"],
+                    class_name=selected_class,
+                    professor=request.user,
+                )
+                if error:
+                    skipped_rows.append({"row": "Single form", "reason": error})
                 else:
-                    account, error = _create_student_account(
-                        first_name=single_form.cleaned_data["first_name"],
-                        last_name=single_form.cleaned_data["last_name"],
-                        net_id=single_form.cleaned_data["net_id"],
-                        student_id=single_form.cleaned_data["student_id"],
-                        class_name=selected_class,
-                    )
-                    if error:
-                        skipped_rows.append({"row": "Single form", "reason": error})
-                    else:
-                        created_accounts.append(account)
-                        info_message = "Student account created."
+                    created_accounts.append(account)
+                    info_message = "Student account created."
 
         if action == "bulk_upload":
             bulk_form = StudentBulkUploadForm(request.POST, request.FILES)
@@ -769,6 +771,8 @@ def professor_manage_accounts(request):
                         net_id=net_id,
                         student_id=student_id,
                         class_name=class_name,
+                        professor=request.user,
+                        create_class=True,
                     )
                     if error:
                         skipped_rows.append({"row": idx, "reason": error})
@@ -784,66 +788,60 @@ def professor_manage_accounts(request):
                 if not normalized_class:
                     skipped_rows.append({"row": "Create class", "reason": "Class name cannot be blank."})
                 else:
-                    Group.objects.get_or_create(name=f"Class: {normalized_class}")
-                    info_message = f'Class group "{normalized_class}" is ready.'
+                    ProfessorClass.objects.get_or_create(professor=request.user, name=normalized_class)
+                    info_message = f'Class "{normalized_class}" is ready.'
 
         if action == "move_student":
             student_id = request.POST.get("student_id", "").strip()
             selected_class_group_id = request.POST.get("class_group_id", "").strip()
-            student = get_object_or_404(_student_queryset(), pk=student_id)
-            existing_class_groups = student.groups.filter(name__startswith="Class: ")
-            student.groups.remove(*existing_class_groups)
+            assignment = get_object_or_404(_student_assignment_queryset(request.user), student_id=student_id)
+            student = assignment.student
 
             if selected_class_group_id == "__UNASSIGNED__":
+                assignment.class_group = None
+                assignment.save(update_fields=["class_group"])
                 info_message = f"Moved {student.username} to Unassigned."
             elif selected_class_group_id:
-                class_group = Group.objects.filter(pk=selected_class_group_id, name__startswith="Class: ").first()
+                class_group = ProfessorClass.objects.filter(pk=selected_class_group_id, professor=request.user).first()
                 if class_group:
-                    student.groups.add(class_group)
-                    class_name = class_group.name.replace("Class: ", "", 1)
-                    info_message = f"Moved {student.username} to class {class_name}."
+                    assignment.class_group = class_group
+                    assignment.save(update_fields=["class_group"])
+                    info_message = f"Moved {student.username} to class {class_group.name}."
                 else:
-                    skipped_rows.append({"row": "Move student", "reason": "Selected class group does not exist."})
+                    skipped_rows.append({"row": "Move student", "reason": "Selected class does not exist."})
             else:
                 skipped_rows.append({"row": "Move student", "reason": "Please choose a class from the dropdown."})
 
         if action == "delete_student":
             student_id = request.POST.get("student_id", "").strip()
-            student = get_object_or_404(_student_queryset(), pk=student_id)
+            assignment = get_object_or_404(_student_assignment_queryset(request.user), student_id=student_id)
+            student = assignment.student
             username = student.username
             student.delete()
             info_message = f"Deleted student account {username}."
 
         if action == "delete_class":
             class_group_id = request.POST.get("class_group_id", "").strip()
-            class_group = Group.objects.filter(pk=class_group_id, name__startswith="Class: ").first()
+            class_group = ProfessorClass.objects.filter(pk=class_group_id, professor=request.user).first()
             if class_group:
-                class_name = class_group.name.replace("Class: ", "", 1)
+                class_name = class_group.name
                 class_group.delete()
-                info_message = f'Deleted class group "{class_name}".'
+                info_message = f'Deleted class "{class_name}".'
             else:
-                skipped_rows.append({"row": "Delete class", "reason": "Class group not found."})
+                skipped_rows.append({"row": "Delete class", "reason": "Class not found."})
 
-    class_groups = (
-        Group.objects.filter(name__startswith="Class: ")
-        .exclude(name__iexact="Class: Unassigned")
-        .order_by("name")
-    )
-    roster_students = _student_queryset().prefetch_related("groups").order_by("username")
+    class_groups = ProfessorClass.objects.filter(professor=request.user).order_by("name")
+    roster_students = _student_assignment_queryset(request.user).order_by("student__username")
     student_rows = []
-    for student in roster_students:
-        class_names = [
-            group.name.replace("Class: ", "", 1)
-            for group in student.groups.all()
-            if group.name.startswith("Class: ") and group.name.lower() != "class: unassigned"
-        ]
+    for assignment in roster_students:
+        student = assignment.student
         student_rows.append(
             {
                 "id": student.id,
                 "username": student.username,
                 "first_name": student.first_name,
                 "last_name": student.last_name,
-                "classes_display": ", ".join(class_names) if class_names else "Unassigned",
+                "classes_display": assignment.class_group.name if assignment.class_group else "Unassigned",
             }
         )
 
@@ -956,7 +954,10 @@ def professor_session_detail(request, session_id):
         return redirect("vip:home")
 
     session = get_object_or_404(
-        ChatSession.objects.select_related("student", "role_prompt"),
+        ChatSession.objects.filter(student__professor_assignment__professor=request.user).select_related(
+            "student",
+            "role_prompt",
+        ),
         pk=session_id,
     )
     messages = session.messages.order_by("created_at")
@@ -976,7 +977,7 @@ def professor_student_logs(request, student_id):
     if not _is_professor(request.user):
         return redirect("vip:home")
 
-    student = get_object_or_404(_student_queryset(), pk=student_id)
+    student = get_object_or_404(_student_queryset(request.user), pk=student_id)
     sessions = (
         ChatSession.objects.filter(student=student)
         .select_related("role_prompt")
@@ -1000,7 +1001,10 @@ def professor_delete_session(request, session_id):
     if not _is_professor(request.user):
         return redirect("vip:home")
 
-    session = get_object_or_404(ChatSession, pk=session_id)
+    session = get_object_or_404(
+        ChatSession.objects.filter(student__professor_assignment__professor=request.user),
+        pk=session_id,
+    )
     student_id = session.student_id
     session.delete()
 
@@ -1016,7 +1020,7 @@ def professor_delete_student_logs(request, student_id):
     if not _is_professor(request.user):
         return redirect("vip:home")
 
-    student = get_object_or_404(_student_queryset(), pk=student_id)
+    student = get_object_or_404(_student_queryset(request.user), pk=student_id)
     ChatSession.objects.filter(student=student).delete()
     return redirect("vip:professor_student_logs", student_id=student_id)
 
@@ -1027,7 +1031,7 @@ def professor_reset_all_student_logs(request):
     if not _is_professor(request.user):
         return redirect("vip:home")
 
-    student_ids = _student_queryset().values_list("id", flat=True)
+    student_ids = _student_queryset(request.user).values_list("id", flat=True)
     ChatSession.objects.filter(student_id__in=student_ids).delete()
     return redirect(f"{reverse('vip:professor_dashboard')}?tab=logs")
 
