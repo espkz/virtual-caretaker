@@ -41,6 +41,14 @@ DEFAULT_META_INSTRUCTIONS = (
 )
 
 
+def _prompt_file_path(filename):
+    candidates = [
+        Path(settings.BASE_DIR).parent / "prompts" / filename,
+        Path(settings.BASE_DIR) / "prompts" / filename,
+    ]
+    return next((path for path in candidates if path.exists()), None)
+
+
 def _split_markdown_sections(text):
     sections = {}
     current = ""
@@ -94,8 +102,8 @@ def _normalize_heading(text):
 
 
 def _extract_template_prefix():
-    prompt_template_path = Path(settings.BASE_DIR).parent / "prompts" / "prompt_template.md"
-    if prompt_template_path.exists():
+    prompt_template_path = _prompt_file_path("prompt_template.md")
+    if prompt_template_path:
         prompt_template = prompt_template_path.read_text(encoding="utf-8")
     else:
         prompt_template = ""
@@ -634,8 +642,8 @@ def professor_download_prompt_template(request):
     if not _is_professor(request.user):
         return redirect("vip:home")
 
-    template_path = Path(settings.BASE_DIR).parent / "prompts" / "role_prompt_fillable.md"
-    if not template_path.exists():
+    template_path = _prompt_file_path("role_prompt_fillable.md")
+    if not template_path:
         return HttpResponseBadRequest("Template file not found.")
 
     content = template_path.read_text(encoding="utf-8")

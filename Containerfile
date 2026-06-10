@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r /app/vipdjango/requirements.txt
 
 # Copy Django project.
 COPY vipdjango /app/vipdjango
+COPY prompts /app/prompts
 
 # Entrypoint handles migrations + static collection before app startup.
 COPY vipdjango/entrypoint.sh /app/entrypoint.sh
