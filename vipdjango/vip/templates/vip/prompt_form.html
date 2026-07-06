@@ -1,88 +1,26 @@
 {% extends "vip/base.html" %}
 {% block title %}{{ page_title }}{% endblock %}
 {% block content %}
-<h1>{{ page_title }}</h1>
+<header class="page-header">
+    <h1>{{ page_title }}</h1>
+    <p class="muted">Build the role prompt in grouped sections, then review the generated Markdown before saving.</p>
+</header>
 
 <style>
     .prompt-layout {
         display: block;
     }
 
-    .panel {
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 14px;
-        background: var(--surface);
-    }
-
-    .panel h2 {
-        margin-top: 0;
-    }
-
-    .tabs {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 12px;
-        flex-wrap: wrap;
-    }
-
-    .tab-btn {
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 6px 10px;
-        background: #f8fafc;
-        cursor: pointer;
-    }
-
-    .tab-btn.active {
-        background: #e2e8f0;
-        font-weight: 600;
-    }
-
-    .tab-panel {
-        display: none;
-    }
-
-    .tab-panel.active {
-        display: block;
-    }
-
-    .field {
-        margin-bottom: 12px;
-    }
-
-    .field label {
-        display: block;
-        font-weight: 600;
-        margin-bottom: 6px;
-    }
-
-    .field input[type="text"],
-    .field select,
-    .field textarea {
-        width: 100%;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 8px 10px;
-        font: inherit;
-    }
-
     .field textarea {
         min-height: 80px;
-        resize: vertical;
-    }
-
-    .errors {
-        color: #b91c1c;
-        margin-bottom: 10px;
     }
 
     .preview-content {
-        border: 1px solid var(--border);
-        border-radius: 8px;
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius);
         padding: 12px;
         min-height: 200px;
-        background: #fbfdff;
+        background: #ffffff;
         overflow-x: auto;
     }
 
@@ -90,7 +28,7 @@
         background: #0f172a;
         color: #e2e8f0;
         padding: 10px;
-        border-radius: 6px;
+        border-radius: var(--radius);
         overflow-x: auto;
     }
 
@@ -109,8 +47,8 @@
     .md-source {
         white-space: pre-wrap;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        border: 1px solid var(--border);
-        border-radius: 8px;
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius);
         background: #f8fafc;
         padding: 12px;
         min-height: 220px;
@@ -243,12 +181,12 @@
                 <div id="md-source" class="md-source"></div>
             </div>
 
-            <button type="submit">Save Prompt</button>
+            <button class="primary" type="submit">Save Prompt</button>
         </form>
     </section>
 </div>
 
-<p class="muted" style="margin-top: 12px;">
+<p class="muted">
     <a href="{% url 'vip:professor_dashboard' %}">Back to Professor Dashboard</a>
 </p>
 

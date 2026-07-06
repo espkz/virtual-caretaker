@@ -2,34 +2,16 @@
 {% block title %}Student Accounts{% endblock %}
 {% block content %}
 <style>
-    .tabs {
-        display: flex;
-        gap: 8px;
-        margin: 10px 0 18px 0;
-    }
-
-    .tab-link {
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 6px 10px;
-        text-decoration: none;
-        color: var(--text);
-        background: #f8fafc;
-    }
-
-    .tab-link.active {
-        background: #e2e8f0;
-        font-weight: 600;
-    }
-
     .secret {
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
         letter-spacing: 0.02em;
     }
 </style>
 
-<h1>Student Accounts</h1>
-<p class="muted">Create one account at a time or upload a spreadsheet to create many students at once. If class is blank, student will be assigned to Unassigned.</p>
+<header class="page-header">
+    <h1>Student Accounts</h1>
+    <p class="muted">Create one account at a time, upload a spreadsheet, and organize students into class groups.</p>
+</header>
 
 <nav class="tabs">
     <a class="tab-link" href="{% url 'vip:professor_dashboard' %}?tab=prompts">Prompts</a>
@@ -44,56 +26,66 @@
 </div>
 {% endif %}
 
-<h2>Create Single Student</h2>
-<form method="post">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="create_single">
-    <p>
-        <label for="single-first-name">First name</label><br>
-        <input id="single-first-name" type="text" name="first_name" required>
-    </p>
-    <p>
-        <label for="single-last-name">Last name</label><br>
-        <input id="single-last-name" type="text" name="last_name" required>
-    </p>
-    <p>
-        <label for="single-student-id">Student ID (numbers only)</label><br>
-        <input id="single-student-id" type="text" name="student_id" required>
-    </p>
-    <p>
-        <label for="single-net-id">NetID</label><br>
-        <input id="single-net-id" type="text" name="net_id" required>
-    </p>
-    <p>
-        <label for="single-class-name">Class</label><br>
-        <select id="single-class-name" name="class_name">
-            <option value="" selected>Unassigned</option>
-            {% for group in class_groups %}
-            <option value="{{ group.name|cut:'Class: ' }}">{{ group.name }}</option>
-            {% endfor %}
-        </select>
-    </p>
-    <button type="submit">Create Student Account</button>
-</form>
+<div class="section-grid">
+    <section class="panel">
+        <h2>Create Single Student</h2>
+        <form class="stack" method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_single">
+            <p>
+                <label for="single-first-name">First name</label><br>
+                <input id="single-first-name" type="text" name="first_name" required>
+            </p>
+            <p>
+                <label for="single-last-name">Last name</label><br>
+                <input id="single-last-name" type="text" name="last_name" required>
+            </p>
+            <p>
+                <label for="single-student-id">Student ID</label><br>
+                <input id="single-student-id" type="text" name="student_id" inputmode="numeric" required>
+            </p>
+            <p>
+                <label for="single-net-id">NetID</label><br>
+                <input id="single-net-id" type="text" name="net_id" required>
+            </p>
+            <p>
+                <label for="single-class-name">Class</label><br>
+                <select id="single-class-name" name="class_name">
+                    <option value="" selected>Unassigned</option>
+                    {% for group in class_groups %}
+                    <option value="{{ group.name|cut:'Class: ' }}">{{ group.name }}</option>
+                    {% endfor %}
+                </select>
+            </p>
+            <button class="primary" type="submit">Create Student Account</button>
+        </form>
+    </section>
 
-<h2>Create Class Group</h2>
-<form method="post">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="create_class">
-    {{ class_form.as_p }}
-    <button type="submit">Create Class Group</button>
-</form>
+    <section class="panel">
+        <h2>Create Class Group</h2>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_class">
+            {{ class_form.as_p }}
+            <button type="submit">Create Class Group</button>
+        </form>
+    </section>
 
-<h2>Bulk Upload</h2>
-<p class="muted">Accepted file types: <code>.xlsx</code> and <code>.csv</code>. Required columns: <code>first_name</code>, <code>last_name</code>, <code>net_id</code>, <code>student_id</code>. Optional column: <code>class_name</code> (blank becomes Unassigned).</p>
-<form method="post" enctype="multipart/form-data">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="bulk_upload">
-    {{ bulk_form.as_p }}
-    <button type="submit">Create Accounts From File</button>
-</form>
+    <section class="panel">
+        <h2>Bulk Upload</h2>
+        <p class="muted">Accepted file types: <code>.xlsx</code> and <code>.csv</code>.</p>
+        <p class="muted">Required columns: <code>first_name</code>, <code>last_name</code>, <code>net_id</code>, <code>student_id</code>. Optional: <code>class_name</code>.</p>
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="bulk_upload">
+            {{ bulk_form.as_p }}
+            <button type="submit">Create Accounts From File</button>
+        </form>
+    </section>
+</div>
 
 {% if created_accounts %}
+<section class="panel">
 <h2>Created Accounts</h2>
 <table>
     <thead>
@@ -124,9 +116,11 @@
     {% endfor %}
     </tbody>
 </table>
+</section>
 {% endif %}
 
 {% if skipped_rows %}
+<section class="panel">
 <h2>Skipped Rows</h2>
 <table>
     <thead>
@@ -144,8 +138,10 @@
     {% endfor %}
     </tbody>
 </table>
+</section>
 {% endif %}
 
+<section class="panel">
 <h2>Existing Class Groups</h2>
 {% if class_groups %}
 <table>
@@ -164,7 +160,7 @@
                     {% csrf_token %}
                     <input type="hidden" name="action" value="delete_class">
                     <input type="hidden" name="class_group_id" value="{{ group.id }}">
-                    <button type="submit" onclick="return confirm('Delete this class group? Students will become unassigned.');">
+                    <button class="danger" type="submit" onclick="return confirm('Delete this class group? Students will become unassigned.');">
                         Delete Class
                     </button>
                 </form>
@@ -176,7 +172,9 @@
 {% else %}
 <p>No class groups yet. They are created automatically during account creation.</p>
 {% endif %}
+</section>
 
+<section class="panel">
 <h2>Student Roster</h2>
 {% if student_rows %}
 <table>
@@ -219,7 +217,7 @@
                     {% csrf_token %}
                     <input type="hidden" name="action" value="delete_student">
                     <input type="hidden" name="student_id" value="{{ student.id }}">
-                    <button type="submit" onclick="return confirm('Delete this student account and all associated chat logs?');">
+                    <button class="danger" type="submit" onclick="return confirm('Delete this student account and all associated chat logs?');">
                         Delete
                     </button>
                 </form>
@@ -231,6 +229,7 @@
 {% else %}
 <p>No student accounts yet.</p>
 {% endif %}
+</section>
 
 <script>
     document.querySelectorAll(".toggle-password").forEach((btn) => {

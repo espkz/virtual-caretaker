@@ -1,8 +1,10 @@
 {% extends "vip/base.html" %}
 {% block title %}Account Settings{% endblock %}
 {% block content %}
-<h1>Account Settings</h1>
-<p class="muted">Update your password and profile details.</p>
+<header class="page-header">
+    <h1>Account Settings</h1>
+    <p class="muted">Update your password and profile details.</p>
+</header>
 
 {% if status_message %}
 <div class="content-card"><strong>{{ status_message }}</strong></div>
@@ -11,28 +13,34 @@
 <div class="content-card"><strong>{{ error_message }}</strong></div>
 {% endif %}
 
+<div class="section-grid">
 {% if is_professor %}
-<h2>Professor Profile</h2>
-<form method="post">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="update_name">
-    <p>
-        <label for="first_name">First name</label><br>
-        <input id="first_name" type="text" name="first_name" value="{{ request.user.first_name }}">
-    </p>
-    <p>
-        <label for="last_name">Last name</label><br>
-        <input id="last_name" type="text" name="last_name" value="{{ request.user.last_name }}">
-    </p>
-    <button type="submit">Save Name</button>
-</form>
+<section class="panel">
+    <h2>Professor Profile</h2>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="update_name">
+        <p>
+            <label for="first_name">First name</label><br>
+            <input id="first_name" type="text" name="first_name" value="{{ request.user.first_name }}">
+        </p>
+        <p>
+            <label for="last_name">Last name</label><br>
+            <input id="last_name" type="text" name="last_name" value="{{ request.user.last_name }}">
+        </p>
+        <button class="primary" type="submit">Save Name</button>
+    </form>
+</section>
 {% endif %}
 
-<h2>Change Password</h2>
-<form method="post">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="change_password">
-    {{ password_form.as_p }}
-    <button type="submit">Update Password</button>
-</form>
+<section class="panel">
+    <h2>Change Password</h2>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="change_password">
+        {{ password_form.as_p }}
+        <button class="primary" type="submit">Update Password</button>
+    </form>
+</section>
+</div>
 {% endblock %}

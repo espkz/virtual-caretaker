@@ -1,194 +1,10 @@
 {% extends "vip/base.html" %}
 {% block title %}Student Dashboard{% endblock %}
 {% block content %}
-<style>
-    .student-layout {
-        display: grid;
-        grid-template-columns: 280px 1fr;
-        gap: 16px;
-        align-items: start;
-    }
-
-    .panel {
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 12px;
-        background: #fff;
-        margin-bottom: 12px;
-    }
-
-    .panel h2 {
-        margin: 0 0 10px 0;
-        font-size: 1.05rem;
-    }
-
-    .prompt-select {
-        width: 100%;
-        padding: 8px;
-        margin-bottom: 10px;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-    }
-
-    .chat-window {
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 12px;
-        min-height: 420px;
-        max-height: 560px;
-        overflow-y: auto;
-        background: #f8fafc;
-        margin-bottom: 12px;
-    }
-
-    .chat-message {
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 8px 10px;
-        margin-bottom: 8px;
-        background: #fff;
-    }
-
-    .chat-message.student {
-        border-left: 4px solid #2563eb;
-        background: #eff6ff;
-    }
-
-    .chat-message.assistant {
-        border-left: 4px solid #059669;
-        background: #ecfdf5;
-    }
-
-    .chat-meta {
-        color: var(--muted);
-        font-size: 0.86rem;
-        margin-bottom: 4px;
-    }
-
-    .message-form textarea {
-        width: 100%;
-        min-height: 80px;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 10px;
-        font: inherit;
-        margin-bottom: 8px;
-    }
-
-    .row-actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-    }
-
-    .voice-actions {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 8px;
-    }
-
-    .compose-row {
-        display: grid;
-        grid-template-columns: 1fr auto auto;
-        gap: 8px;
-        align-items: end;
-    }
-
-    .mic-button {
-        width: 44px;
-        height: 44px;
-        border-radius: 999px;
-        border: 1px solid #94a3b8;
-        background: #f8fafc;
-        font-size: 1.1rem;
-        line-height: 1;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-    }
-
-    .mic-button.listening {
-        background: #fee2e2;
-        border-color: #ef4444;
-    }
-
-    .send-button-inline {
-        height: 44px;
-        padding: 0 14px;
-    }
-
-    .voice-status {
-        color: var(--muted);
-        font-size: 0.85rem;
-        margin-bottom: 8px;
-    }
-
-    .tts-button {
-        margin-top: 6px;
-    }
-
-    .tts-toggle {
-        margin-bottom: 10px;
-    }
-
-    .message-audio-controls {
-        margin-top: 8px;
-        padding: 8px;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        background: #f8fafc;
-    }
-
-    .message-audio-controls audio {
-        width: 100%;
-        margin-bottom: 8px;
-    }
-
-    .audio-status {
-        color: var(--muted);
-        font-size: 0.85rem;
-        margin-bottom: 6px;
-    }
-
-    .session-list {
-        margin: 0;
-        padding: 0;
-        list-style: none;
-    }
-
-    .session-list li {
-        border-bottom: 1px solid #e5e7eb;
-        padding: 8px 0;
-    }
-
-    .session-list li:last-child {
-        border-bottom: none;
-    }
-
-    .error-text {
-        color: #b91c1c;
-        margin-bottom: 8px;
-    }
-
-    .closed-banner {
-        border: 1px solid #f59e0b;
-        background: #fffbeb;
-        color: #92400e;
-        border-radius: 8px;
-        padding: 10px 12px;
-        margin-bottom: 10px;
-    }
-
-    @media (max-width: 960px) {
-        .student-layout {
-            grid-template-columns: 1fr;
-        }
-    }
-</style>
-
-<h1>Student Dashboard</h1>
-<p>Welcome {% if request.user.first_name %}{{ request.user.first_name }}{% else %}{{ request.user.username }}{% endif %}.</p>
+<header class="page-header">
+    <h1>Student Dashboard</h1>
+    <p class="muted">Welcome {% if request.user.first_name %}{{ request.user.first_name }}{% else %}{{ request.user.username }}{% endif %}.</p>
+</header>
 
 <div class="student-layout">
     <aside>
@@ -274,7 +90,7 @@
             <div class="closed-banner">
                 This conversation is closed at {{ current_session.ended_at }}.
             </div>
-            <div class="row-actions" style="margin-bottom: 10px;">
+            <div class="row-actions mb-10">
                 <a href="{% url 'vip:student_download_session' current_session.id %}">Download This Closed Conversation</a>
             </div>
             <form method="post">
@@ -318,7 +134,7 @@
                     {% endif %}
                 </div>
                 {% if current_session %}
-                <div class="row-actions" style="margin-top: 8px;">
+                <div class="row-actions mt-8">
                     <button type="submit" name="action" value="close_conversation" formnovalidate>Close Conversation</button>
                 </div>
                 {% endif %}

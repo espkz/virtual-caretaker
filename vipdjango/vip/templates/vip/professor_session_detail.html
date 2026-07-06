@@ -1,62 +1,15 @@
 {% extends "vip/base.html" %}
 {% block title %}Session {{ session.id }}{% endblock %}
 {% block content %}
-<style>
-    .meta-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 10px;
-        margin-bottom: 16px;
-    }
+<header class="page-header">
+    <h1>Session #{{ session.id }}</h1>
+    <p class="muted">Review chat history between student and chatbot.</p>
+</header>
 
-    .meta-item {
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 10px;
-        background: #f8fafc;
-    }
-
-    .chat-list {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        margin-bottom: 14px;
-    }
-
-    .message {
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 10px 12px;
-        background: #ffffff;
-    }
-
-    .message.student {
-        border-left: 4px solid #2563eb;
-        background: #eff6ff;
-    }
-
-    .message.assistant {
-        border-left: 4px solid #059669;
-        background: #ecfdf5;
-    }
-
-    .message-meta {
-        font-size: 0.9rem;
-        color: var(--muted);
-        margin-bottom: 6px;
-    }
-
-    .message-content {
-        white-space: pre-wrap;
-    }
-</style>
-
-<h1>Session #{{ session.id }}</h1>
-<p class="muted">Review chat history between student and chatbot.</p>
-<form method="post" action="{% url 'vip:professor_delete_session' session.id %}" style="margin-bottom: 12px;">
+<form class="mb-14" method="post" action="{% url 'vip:professor_delete_session' session.id %}">
     {% csrf_token %}
     <input type="hidden" name="next" value="{% url 'vip:professor_student_logs' session.student.id %}">
-    <button type="submit" onclick="return confirm('Delete this session log?');">Delete This Session</button>
+    <button class="danger" type="submit" onclick="return confirm('Delete this session log?');">Delete This Session</button>
 </form>
 
 <div class="meta-grid">
@@ -76,11 +29,11 @@
 {% if messages %}
 <div class="chat-list">
     {% for message in messages %}
-    <article class="message {{ message.sender }}">
-        <div class="message-meta">
+    <article class="chat-message {{ message.sender }}">
+        <div class="chat-meta">
             {{ message.get_sender_display }} | {{ message.created_at }}
         </div>
-        <div class="message-content">{{ message.content }}</div>
+        <div class="pre-wrap">{{ message.content }}</div>
     </article>
     {% endfor %}
 </div>
