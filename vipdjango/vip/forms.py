@@ -1,70 +1,6 @@
-import re
-
 from django import forms
 from .models import RolePrompt
-
-
-def _normalize_heading(text):
-    value = re.sub(r"\(optional\)", "", (text or ""), flags=re.IGNORECASE)
-    value = value.strip().lower()
-    value = value.replace("&", " and ")
-    value = re.sub(r"[^a-z0-9]+", " ", value)
-    return re.sub(r"\s+", " ", value).strip()
-
-
-def _normalize_gender(value, default="female"):
-    v = _normalize_heading(value)
-    if v in {"male", "female"}:
-        return v
-    if v.startswith("male "):
-        return "male"
-    if v.startswith("female "):
-        return "female"
-    return default
-
-
-def _split_markdown_sections(text):
-    sections = {}
-    current = ""
-    for line in (text or "").splitlines():
-        match = re.match(r"^\s*##\s+(.+?)\s*$", line)
-        if match:
-            current = _normalize_heading(match.group(1))
-            sections.setdefault(current, [])
-            continue
-        if current:
-            sections[current].append(line)
-    return {key: "\n".join(value).strip() for key, value in sections.items()}
-
-
-def _find_section_by_aliases(sections, aliases):
-    normalized = {key: value for key, value in sections.items()}
-
-    # Pass 1: exact match only.
-    for alias in aliases:
-        alias = _normalize_heading(alias)
-        if alias in normalized:
-            return normalized[alias]
-
-    # Pass 2: ranked prefix match (prefer non-voice variants).
-    best_value = ""
-    best_score = None
-    for alias in aliases:
-        alias = _normalize_heading(alias)
-        alias_tokens = alias.split()
-        for key, value in normalized.items():
-            key_tokens = key.split()
-            if len(key_tokens) < len(alias_tokens):
-                continue
-            if key_tokens[: len(alias_tokens)] != alias_tokens:
-                continue
-            extra_tokens = key_tokens[len(alias_tokens) :]
-            penalty = 5 if ("voice" in extra_tokens and "voice" not in alias_tokens) else 0
-            score = len(extra_tokens) + penalty
-            if best_score is None or score < best_score:
-                best_score = score
-                best_value = value
-    return best_value
+from .prompt_utils import find_section_by_aliases, normalize_gender, split_markdown_sections
 
 
 class RolePromptForm(forms.Form):
@@ -134,41 +70,41 @@ class RolePromptForm(forms.Form):
 
     @classmethod
     def initial_from_content(cls, content, title="", is_active=False):
-        sections = _split_markdown_sections(content)
-        voice_gender = _normalize_gender(_find_section_by_aliases(sections, ["voice gender"]), default="female")
-        role = _find_section_by_aliases(sections, ["role", "role summary", "character"])
+        sections = split_markdown_sections(content)
+        voice_gender = normalize_gender(find_section_by_aliases(sections, ["voice gender"]), default="female")
+        role = find_section_by_aliases(sections, ["role", "role summary", "character"])
         if not role:
             role = (content or "").strip()
         return {
             "title": title,
             "is_active": is_active,
             "role": role,
-            "learner_role": _find_section_by_aliases(sections, ["learner role", "user role"]),
+            "learner_role": find_section_by_aliases(sections, ["learner role", "user role"]),
             "voice_gender": voice_gender,
-            "voice_style": _find_section_by_aliases(sections, ["voice style", "voice instructions"]),
-            "intro_voice_gender": _normalize_gender(
-                _find_section_by_aliases(sections, ["introduction voice gender", "intro voice gender"]),
+            "voice_style": find_section_by_aliases(sections, ["voice style", "voice instructions"]),
+            "intro_voice_gender": normalize_gender(
+                find_section_by_aliases(sections, ["introduction voice gender", "intro voice gender"]),
                 default=voice_gender,
             ),
-            "intro_voice_style": _find_section_by_aliases(sections, ["introduction voice style", "intro voice style"]),
-            "introduction": _find_section_by_aliases(sections, ["introduction", "introduction: greeting"]),
-            "opening_line": _find_section_by_aliases(sections, ["opening line"]),
-            "beginning": _find_section_by_aliases(sections, ["beginning", "conversation progression: beginning"]),
-            "begin_to_middle_cues": _find_section_by_aliases(
+            "intro_voice_style": find_section_by_aliases(sections, ["introduction voice style", "intro voice style"]),
+            "introduction": find_section_by_aliases(sections, ["introduction", "introduction: greeting"]),
+            "opening_line": find_section_by_aliases(sections, ["opening line"]),
+            "beginning": find_section_by_aliases(sections, ["beginning", "conversation progression: beginning"]),
+            "begin_to_middle_cues": find_section_by_aliases(
                 sections,
                 ["beginning to middle cues", "middle triggers", "middle trigger", "trigger"],
             ),
-            "middle": _find_section_by_aliases(sections, ["middle", "conversation progression: middle"]),
-            "middle_to_ending_cues": _find_section_by_aliases(
+            "middle": find_section_by_aliases(sections, ["middle", "conversation progression: middle"]),
+            "middle_to_ending_cues": find_section_by_aliases(
                 sections,
                 ["middle to ending cues", "ending triggers", "ending trigger"],
             ),
-            "ending": _find_section_by_aliases(
+            "ending": find_section_by_aliases(
                 sections,
                 ["ending", "end", "conversation progression: end", "conversation progression: ending"],
             ),
-            "closing": _find_section_by_aliases(sections, ["closing", "final response"]),
-            "meta_instructions": _find_section_by_aliases(
+            "closing": find_section_by_aliases(sections, ["closing", "final response"]),
+            "meta_instructions": find_section_by_aliases(
                 sections,
                 ["meta instructions", "meta-instructions", "meta instruction", "notes"],
             ),

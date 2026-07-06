@@ -4,17 +4,17 @@ import io
 import csv
 import logging
 from pathlib import Path
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.http import HttpResponse, HttpResponseBadRequest
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import Group
 from django.contrib.auth import update_session_auth_hash
 from django.db.models import Count, Max, Q
-from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.text import slugify
 from django.utils import timezone
@@ -28,10 +28,7 @@ from .forms import (
     StudentBulkUploadForm,
 )
 from .models import ChatMessage, ChatSession, RolePrompt
-
-"""
-base
-"""
+from .prompt_utils import find_section_by_aliases, split_markdown_sections
 
 logger = logging.getLogger(__name__)
 
@@ -49,58 +46,6 @@ def _prompt_file_path(filename):
     return next((path for path in candidates if path.exists()), None)
 
 
-def _split_markdown_sections(text):
-    sections = {}
-    current = ""
-    for line in (text or "").splitlines():
-        match = re.match(r"^\s*##\s+(.+?)\s*$", line)
-        if match:
-            current = _normalize_heading(match.group(1))
-            sections.setdefault(current, [])
-            continue
-        if current:
-            sections[current].append(line)
-    return {key: "\n".join(value).strip() for key, value in sections.items()}
-
-
-def _section_by_aliases(sections, aliases):
-    normalized = {key: value for key, value in sections.items()}
-
-    # Pass 1: exact match only.
-    for alias in aliases:
-        alias = _normalize_heading(alias)
-        if alias in normalized:
-            return normalized[alias]
-
-    # Pass 2: ranked prefix match (prefer non-voice variants).
-    best_value = ""
-    best_score = None
-    for alias in aliases:
-        alias = _normalize_heading(alias)
-        alias_tokens = alias.split()
-        for key, value in normalized.items():
-            key_tokens = key.split()
-            if len(key_tokens) < len(alias_tokens):
-                continue
-            if key_tokens[: len(alias_tokens)] != alias_tokens:
-                continue
-            extra_tokens = key_tokens[len(alias_tokens) :]
-            penalty = 5 if ("voice" in extra_tokens and "voice" not in alias_tokens) else 0
-            score = len(extra_tokens) + penalty
-            if best_score is None or score < best_score:
-                best_score = score
-                best_value = value
-    return best_value
-
-
-def _normalize_heading(text):
-    value = re.sub(r"\(optional\)", "", (text or ""), flags=re.IGNORECASE)
-    value = value.strip().lower()
-    value = value.replace("&", " and ")
-    value = re.sub(r"[^a-z0-9]+", " ", value)
-    return re.sub(r"\s+", " ", value).strip()
-
-
 def _extract_template_prefix():
     prompt_template_path = _prompt_file_path("prompt_template.md")
     if prompt_template_path:
@@ -113,21 +58,21 @@ def _extract_template_prefix():
 
 
 def _parse_role_config(role_text):
-    sections = _split_markdown_sections(role_text)
-    role = _section_by_aliases(sections, ["role", "role summary", "character"])
-    learner_role = _section_by_aliases(sections, ["learner role", "user role"])
-    voice_gender = (_section_by_aliases(sections, ["voice gender", "voice"]) or "female").lower().strip()
+    sections = split_markdown_sections(role_text)
+    role = find_section_by_aliases(sections, ["role", "role summary", "character"])
+    learner_role = find_section_by_aliases(sections, ["learner role", "user role"])
+    voice_gender = (find_section_by_aliases(sections, ["voice gender", "voice"]) or "female").lower().strip()
     if voice_gender not in {"male", "female"}:
-        merged = f"{role_text}\n{_section_by_aliases(sections, ['introduction'])}"
+        merged = f"{role_text}\n{find_section_by_aliases(sections, ['introduction'])}"
         voice_gender = "male" if "male voice" in merged.lower() else "female"
-    voice_style = _section_by_aliases(sections, ["voice style", "voice instructions"]) or "speak naturally and clearly"
+    voice_style = find_section_by_aliases(sections, ["voice style", "voice instructions"]) or "speak naturally and clearly"
     intro_voice_gender = (
-        _section_by_aliases(sections, ["introduction voice gender", "intro voice gender"]) or voice_gender
+        find_section_by_aliases(sections, ["introduction voice gender", "intro voice gender"]) or voice_gender
     ).lower().strip()
     if intro_voice_gender not in {"male", "female"}:
         intro_voice_gender = voice_gender
     intro_voice_style = (
-        _section_by_aliases(sections, ["introduction voice style", "intro voice style"]) or voice_style
+        find_section_by_aliases(sections, ["introduction voice style", "intro voice style"]) or voice_style
     )
     return {
         "role": role or role_text.strip(),
@@ -136,18 +81,18 @@ def _parse_role_config(role_text):
         "voice_style": voice_style.strip(),
         "intro_voice_gender": intro_voice_gender,
         "intro_voice_style": intro_voice_style.strip(),
-        "introduction": _section_by_aliases(sections, ["introduction", "introduction: greeting"]),
-        "opening_line": _section_by_aliases(sections, ["opening line"]),
-        "beginning": _section_by_aliases(sections, ["beginning", "conversation progression: beginning"]),
-        "middle": _section_by_aliases(sections, ["middle", "conversation progression: middle"]),
-        "ending": _section_by_aliases(sections, ["ending", "end", "conversation progression: end"]),
-        "closing": _section_by_aliases(sections, ["closing", "final response"]),
-        "meta": _section_by_aliases(sections, ["meta instructions", "meta instruction", "meta-instructions", "notes"]),
-        "begin_cues": _section_by_aliases(
+        "introduction": find_section_by_aliases(sections, ["introduction", "introduction: greeting"]),
+        "opening_line": find_section_by_aliases(sections, ["opening line"]),
+        "beginning": find_section_by_aliases(sections, ["beginning", "conversation progression: beginning"]),
+        "middle": find_section_by_aliases(sections, ["middle", "conversation progression: middle"]),
+        "ending": find_section_by_aliases(sections, ["ending", "end", "conversation progression: end"]),
+        "closing": find_section_by_aliases(sections, ["closing", "final response"]),
+        "meta": find_section_by_aliases(sections, ["meta instructions", "meta instruction", "meta-instructions", "notes"]),
+        "begin_cues": find_section_by_aliases(
             sections,
             ["beginning to middle cues", "begin-to-middle cues", "middle trigger", "middle triggers", "trigger"],
         ),
-        "end_cues": _section_by_aliases(
+        "end_cues": find_section_by_aliases(
             sections,
             ["middle to ending cues", "middle-to-ending cues", "ending trigger", "ending triggers"],
         ),
@@ -577,9 +522,7 @@ def account_settings(request):
         },
     )
 
-"""
-PROFESSOR
-"""
+# Professor views
 @login_required
 def professor_dashboard(request):
     if not _is_professor(request.user):
@@ -1040,11 +983,57 @@ def professor_reset_all_student_logs(request):
     return redirect(f"{reverse('vip:professor_dashboard')}?tab=logs")
 
 
-@login_required
-def professor_test_chat(request):
-    if not _is_professor(request.user):
-        return redirect("vip:home")
+def _chat_url(view_name, selected_prompt=None, **params):
+    query = {}
+    if selected_prompt:
+        query["prompt"] = selected_prompt.id
+    query.update({key: value for key, value in params.items() if value is not None})
+    url = reverse(view_name)
+    return f"{url}?{urlencode(query)}" if query else url
 
+
+def _rendered_chat_messages(session, user_label):
+    if not session:
+        return []
+
+    rendered = []
+    for message in session.messages.order_by("created_at"):
+        display_content = message.content
+        if message.sender == ChatMessage.Sender.ASSISTANT:
+            display_content, _ = _parse_dialogue_and_emotion(message.content)
+        rendered.append(
+            {
+                "id": message.id,
+                "sender": message.sender,
+                "sender_display": "AI" if message.sender == ChatMessage.Sender.ASSISTANT else user_label,
+                "created_at": message.created_at,
+                "display_content": display_content,
+            }
+        )
+    return rendered
+
+
+def _chat_dashboard_context(
+    active_prompts,
+    selected_prompt,
+    sessions,
+    current_session,
+    error_message,
+    user_label,
+    force_new,
+):
+    return {
+        "active_prompts": active_prompts,
+        "selected_prompt": selected_prompt,
+        "sessions": sessions,
+        "current_session": current_session,
+        "rendered_messages": _rendered_chat_messages(current_session, user_label),
+        "error_message": error_message,
+        "force_new": force_new,
+    }
+
+
+def _selected_chat_state(request):
     active_prompts = RolePrompt.objects.filter(is_active=True).order_by("title")
     sessions = (
         ChatSession.objects.filter(student=request.user)
@@ -1060,8 +1049,6 @@ def professor_test_chat(request):
     if not selected_prompt:
         selected_prompt = active_prompts.first()
 
-    start_new = request.GET.get("new") == "1"
-    force_new = request.POST.get("force_new") == "1" or request.GET.get("force_new") == "1"
     current_session = None
     session_id = request.POST.get("session_id") or request.GET.get("session")
     if session_id:
@@ -1069,347 +1056,169 @@ def professor_test_chat(request):
             ChatSession.objects.filter(student=request.user).select_related("role_prompt"),
             pk=session_id,
         )
-    elif not start_new and selected_prompt:
+    elif request.GET.get("new") != "1" and selected_prompt:
         current_session = sessions.filter(role_prompt=selected_prompt).first()
 
+    force_new = request.POST.get("force_new") == "1" or request.GET.get("force_new") == "1"
+    return active_prompts, sessions, selected_prompt, current_session, force_new
+
+
+def _usable_chat_session(user, selected_prompt, current_session, force_new):
+    needs_session = (
+        not current_session
+        or current_session.role_prompt_id != selected_prompt.id
+        or current_session.ended_at is not None
+        or force_new
+    )
+    if needs_session:
+        current_session = None
+        if not force_new:
+            current_session = (
+                ChatSession.objects.filter(
+                    student=user,
+                    role_prompt=selected_prompt,
+                    ended_at__isnull=True,
+                )
+                .order_by("-started_at")
+                .first()
+            )
+        return current_session or ChatSession.objects.create(student=user, role_prompt=selected_prompt), None
+
+    latest_message = current_session.messages.order_by("-created_at").first()
+    if latest_message and latest_message.sender == ChatMessage.Sender.STUDENT:
+        return current_session, "Please wait for the AI response before sending another message."
+    return current_session, None
+
+
+def _chat_dashboard(
+    request,
+    *,
+    template_name,
+    view_name,
+    user_label,
+    no_prompt_message,
+    allow_delete_session=False,
+):
+    active_prompts, sessions, selected_prompt, current_session, force_new = _selected_chat_state(request)
     error_message = None
+
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "new_session":
-            target = reverse("vip:professor_test_chat")
-            if selected_prompt:
-                target += f"?prompt={selected_prompt.id}&new=1&force_new=1"
-            return redirect(target)
+            return redirect(_chat_url(view_name, selected_prompt, new=1, force_new=1))
 
-        if action == "delete_session":
+        if allow_delete_session and action == "delete_session":
             target_session_id = request.POST.get("target_session_id") or request.POST.get("session_id")
             if target_session_id:
-                session_to_delete = get_object_or_404(ChatSession, pk=target_session_id, student=request.user)
-                session_to_delete.delete()
-            target = reverse("vip:professor_test_chat")
-            if selected_prompt:
-                target += f"?prompt={selected_prompt.id}&new=1"
-            return redirect(target)
+                get_object_or_404(ChatSession, pk=target_session_id, student=request.user).delete()
+            return redirect(_chat_url(view_name, selected_prompt, new=1))
 
         if action == "close_conversation":
             if current_session and current_session.ended_at is None:
                 current_session.ended_at = timezone.now()
                 current_session.save(update_fields=["ended_at"])
-            target = reverse("vip:professor_test_chat")
-            if selected_prompt:
-                target += f"?prompt={selected_prompt.id}&new=1"
-            return redirect(target)
+            return redirect(_chat_url(view_name, selected_prompt, new=1))
 
         if action == "send_message":
             user_text = request.POST.get("message", "").strip()
             if not selected_prompt:
-                error_message = "No active prompt is available. Activate at least one prompt first."
+                error_message = no_prompt_message
             elif not user_text:
                 error_message = "Please type a message before sending."
             else:
-                if (
-                    not current_session
-                    or current_session.role_prompt_id != selected_prompt.id
-                    or current_session.ended_at is not None
-                    or force_new
-                ):
-                    current_session = None
-                    if not force_new:
-                        current_session = (
-                            ChatSession.objects.filter(
-                                student=request.user,
-                                role_prompt=selected_prompt,
-                                ended_at__isnull=True,
-                            )
-                            .order_by("-started_at")
-                            .first()
-                        )
-                    if current_session is None:
-                        current_session = ChatSession.objects.create(
-                            student=request.user,
-                            role_prompt=selected_prompt,
-                        )
-                else:
-                    latest_message = current_session.messages.order_by("-created_at").first()
-                    if latest_message and latest_message.sender == ChatMessage.Sender.STUDENT:
-                        error_message = "Please wait for the AI response before sending another message."
-
-                if error_message:
-                    current_messages = []
-                    if current_session:
-                        current_messages = current_session.messages.order_by("created_at")
-                    rendered_messages = []
-                    for message in current_messages:
-                        display_content = message.content
-                        if message.sender == ChatMessage.Sender.ASSISTANT:
-                            display_content, _ = _parse_dialogue_and_emotion(message.content)
-                        rendered_messages.append(
-                            {
-                                "id": message.id,
-                                "sender": message.sender,
-                                "sender_display": "AI" if message.sender == ChatMessage.Sender.ASSISTANT else "Professor",
-                                "created_at": message.created_at,
-                                "display_content": display_content,
-                            }
-                        )
-                    return render(
-                        request,
-                        "vip/professor_test_chat.html",
-                        {
-                            "active_prompts": active_prompts,
-                            "selected_prompt": selected_prompt,
-                            "sessions": sessions,
-                            "current_session": current_session,
-                            "rendered_messages": rendered_messages,
-                            "error_message": error_message,
-                            "force_new": force_new,
-                        },
-                    )
-
-                ChatMessage.objects.create(
-                    session=current_session,
-                    sender=ChatMessage.Sender.STUDENT,
-                    content=user_text,
+                current_session, error_message = _usable_chat_session(
+                    request.user,
+                    selected_prompt,
+                    current_session,
+                    force_new,
                 )
 
-                session_messages = current_session.messages.order_by("created_at")
-                assistant_text, should_auto_close, debug_info = _generate_assistant_response(
-                    selected_prompt.content,
-                    session_messages,
-                )
-                ChatMessage.objects.create(
-                    session=current_session,
-                    sender=ChatMessage.Sender.ASSISTANT,
-                    content=assistant_text,
-                )
-                logger.debug(
-                    "Chat response generated: user=%s session=%s stage=%s auto_close=%s reason=%s",
-                    request.user.username,
-                    current_session.id,
-                    debug_info.get("stage"),
-                    should_auto_close,
-                    debug_info.get("reason"),
-                )
-                if should_auto_close and current_session.ended_at is None:
-                    current_session.ended_at = timezone.now()
-                    current_session.save(update_fields=["ended_at"])
-                return redirect(
-                    f"{reverse('vip:professor_test_chat')}?prompt={selected_prompt.id}&session={current_session.id}&autoplay=1"
+            if error_message:
+                return render(
+                    request,
+                    template_name,
+                    _chat_dashboard_context(
+                        active_prompts,
+                        selected_prompt,
+                        sessions,
+                        current_session,
+                        error_message,
+                        user_label,
+                        force_new,
+                    ),
                 )
 
-    current_messages = []
-    if current_session:
-        current_messages = current_session.messages.order_by("created_at")
-    rendered_messages = []
-    for message in current_messages:
-        display_content = message.content
-        if message.sender == ChatMessage.Sender.ASSISTANT:
-            display_content, _ = _parse_dialogue_and_emotion(message.content)
-        rendered_messages.append(
-            {
-                "id": message.id,
-                "sender": message.sender,
-                "sender_display": "AI" if message.sender == ChatMessage.Sender.ASSISTANT else "Professor",
-                "created_at": message.created_at,
-                "display_content": display_content,
-            }
-        )
+            ChatMessage.objects.create(
+                session=current_session,
+                sender=ChatMessage.Sender.STUDENT,
+                content=user_text,
+            )
+
+            assistant_text, should_auto_close, debug_info = _generate_assistant_response(
+                selected_prompt.content,
+                current_session.messages.order_by("created_at"),
+            )
+            ChatMessage.objects.create(
+                session=current_session,
+                sender=ChatMessage.Sender.ASSISTANT,
+                content=assistant_text,
+            )
+            logger.debug(
+                "Chat response generated: user=%s session=%s stage=%s auto_close=%s reason=%s",
+                request.user.username,
+                current_session.id,
+                debug_info.get("stage"),
+                should_auto_close,
+                debug_info.get("reason"),
+            )
+            if should_auto_close and current_session.ended_at is None:
+                current_session.ended_at = timezone.now()
+                current_session.save(update_fields=["ended_at"])
+            return redirect(_chat_url(view_name, selected_prompt, session=current_session.id, autoplay=1))
 
     return render(
         request,
-        "vip/professor_test_chat.html",
-        {
-            "active_prompts": active_prompts,
-            "selected_prompt": selected_prompt,
-            "sessions": sessions,
-            "current_session": current_session,
-            "rendered_messages": rendered_messages,
-            "error_message": error_message,
-            "force_new": force_new,
-        },
+        template_name,
+        _chat_dashboard_context(
+            active_prompts,
+            selected_prompt,
+            sessions,
+            current_session,
+            error_message,
+            user_label,
+            force_new,
+        ),
     )
 
 
-"""
-STUDENT
-"""
+@login_required
+def professor_test_chat(request):
+    if not _is_professor(request.user):
+        return redirect("vip:home")
+
+    return _chat_dashboard(
+        request,
+        template_name="vip/professor_test_chat.html",
+        view_name="vip:professor_test_chat",
+        user_label="Professor",
+        no_prompt_message="No active prompt is available. Activate at least one prompt first.",
+        allow_delete_session=True,
+    )
+
+
+# Student views
 
 @login_required
 def student_dashboard(request):
     if not _is_student(request.user):
         return redirect("vip:home")
 
-    active_prompts = RolePrompt.objects.filter(is_active=True).order_by("title")
-    sessions = (
-        ChatSession.objects.filter(student=request.user)
-        .select_related("role_prompt")
-        .prefetch_related("messages")
-        .order_by("-started_at")
-    )
-
-    selected_prompt = None
-    selected_prompt_id = request.POST.get("prompt_id") or request.GET.get("prompt")
-    if selected_prompt_id:
-        selected_prompt = active_prompts.filter(pk=selected_prompt_id).first()
-    if not selected_prompt:
-        selected_prompt = active_prompts.first()
-
-    start_new = request.GET.get("new") == "1"
-    force_new = request.POST.get("force_new") == "1" or request.GET.get("force_new") == "1"
-    current_session = None
-    session_id = request.POST.get("session_id") or request.GET.get("session")
-    if session_id:
-        current_session = get_object_or_404(
-            ChatSession.objects.filter(student=request.user).select_related("role_prompt"),
-            pk=session_id,
-        )
-    elif not start_new and selected_prompt:
-        current_session = sessions.filter(role_prompt=selected_prompt).first()
-
-    error_message = None
-    if request.method == "POST":
-        action = request.POST.get("action")
-        if action == "new_session":
-            target = reverse("vip:student_dashboard")
-            if selected_prompt:
-                target += f"?prompt={selected_prompt.id}&new=1&force_new=1"
-            return redirect(target)
-
-        if action == "close_conversation":
-            if current_session and current_session.ended_at is None:
-                current_session.ended_at = timezone.now()
-                current_session.save(update_fields=["ended_at"])
-            target = reverse("vip:student_dashboard")
-            if selected_prompt:
-                target += f"?prompt={selected_prompt.id}&new=1"
-            return redirect(target)
-
-        if action == "send_message":
-            user_text = request.POST.get("message", "").strip()
-            if not selected_prompt:
-                error_message = "No active prompt is available. Ask your professor to activate one."
-            elif not user_text:
-                error_message = "Please type a message before sending."
-            else:
-                if (
-                    not current_session
-                    or current_session.role_prompt_id != selected_prompt.id
-                    or current_session.ended_at is not None
-                    or force_new
-                ):
-                    current_session = None
-                    if not force_new:
-                        current_session = (
-                            ChatSession.objects.filter(
-                                student=request.user,
-                                role_prompt=selected_prompt,
-                                ended_at__isnull=True,
-                            )
-                            .order_by("-started_at")
-                            .first()
-                        )
-                    if current_session is None:
-                        current_session = ChatSession.objects.create(
-                            student=request.user,
-                            role_prompt=selected_prompt,
-                        )
-                else:
-                    latest_message = current_session.messages.order_by("-created_at").first()
-                    if latest_message and latest_message.sender == ChatMessage.Sender.STUDENT:
-                        error_message = "Please wait for the AI response before sending another message."
-
-                if error_message:
-                    current_messages = []
-                    if current_session:
-                        current_messages = current_session.messages.order_by("created_at")
-                    rendered_messages = []
-                    for message in current_messages:
-                        display_content = message.content
-                        if message.sender == ChatMessage.Sender.ASSISTANT:
-                            display_content, _ = _parse_dialogue_and_emotion(message.content)
-                        rendered_messages.append(
-                            {
-                                "id": message.id,
-                                "sender": message.sender,
-                                "sender_display": "AI" if message.sender == ChatMessage.Sender.ASSISTANT else "Student",
-                                "created_at": message.created_at,
-                                "display_content": display_content,
-                            }
-                        )
-                    return render(
-                        request,
-                        "vip/student_dashboard.html",
-                        {
-                            "active_prompts": active_prompts,
-                            "selected_prompt": selected_prompt,
-                            "sessions": sessions,
-                            "current_session": current_session,
-                            "rendered_messages": rendered_messages,
-                            "error_message": error_message,
-                        },
-                    )
-
-                ChatMessage.objects.create(
-                    session=current_session,
-                    sender=ChatMessage.Sender.STUDENT,
-                    content=user_text,
-                )
-
-                session_messages = current_session.messages.order_by("created_at")
-                assistant_text, should_auto_close, debug_info = _generate_assistant_response(
-                    selected_prompt.content,
-                    session_messages,
-                )
-                ChatMessage.objects.create(
-                    session=current_session,
-                    sender=ChatMessage.Sender.ASSISTANT,
-                    content=assistant_text,
-                )
-                logger.debug(
-                    "Chat response generated: user=%s session=%s stage=%s auto_close=%s reason=%s",
-                    request.user.username,
-                    current_session.id,
-                    debug_info.get("stage"),
-                    should_auto_close,
-                    debug_info.get("reason"),
-                )
-                if should_auto_close and current_session.ended_at is None:
-                    current_session.ended_at = timezone.now()
-                    current_session.save(update_fields=["ended_at"])
-                return redirect(
-                    f"{reverse('vip:student_dashboard')}?prompt={selected_prompt.id}&session={current_session.id}&autoplay=1"
-                )
-
-    current_messages = []
-    if current_session:
-        current_messages = current_session.messages.order_by("created_at")
-    rendered_messages = []
-    for message in current_messages:
-        display_content = message.content
-        if message.sender == ChatMessage.Sender.ASSISTANT:
-            display_content, _ = _parse_dialogue_and_emotion(message.content)
-        rendered_messages.append(
-            {
-                "id": message.id,
-                "sender": message.sender,
-                "sender_display": "AI" if message.sender == ChatMessage.Sender.ASSISTANT else "Student",
-                "created_at": message.created_at,
-                "display_content": display_content,
-            }
-        )
-
-    return render(
+    return _chat_dashboard(
         request,
-        "vip/student_dashboard.html",
-        {
-            "active_prompts": active_prompts,
-            "selected_prompt": selected_prompt,
-            "sessions": sessions,
-            "current_session": current_session,
-            "rendered_messages": rendered_messages,
-            "error_message": error_message,
-            "force_new": force_new,
-        },
+        template_name="vip/student_dashboard.html",
+        view_name="vip:student_dashboard",
+        user_label="Student",
+        no_prompt_message="No active prompt is available. Ask your professor to activate one.",
     )
 
 
