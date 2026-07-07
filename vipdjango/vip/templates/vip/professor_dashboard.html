@@ -1,10 +1,9 @@
 {% extends "vip/base.html" %}
-{% block title %}Professor Dashboard{% endblock %}
+{% block title %}Home{% endblock %}
 {% block content %}
 
 <header class="page-header">
-    <h1>Professor Dashboard</h1>
-    <p class="muted">Welcome {% if request.user.first_name %}{{ request.user.first_name }}{% else %}{{ request.user.username }}{% endif %}.</p>
+    <h1>Welcome {% if request.user.first_name %}{{ request.user.first_name }}{% else %}{{ request.user.username }}{% endif %}.</h1>
 </header>
 
 <nav class="tabs">
