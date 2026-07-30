@@ -71,9 +71,4 @@ Describe end-stage behavior:
 Write the exact final closing line to use when ending the conversation.
 
 ## Meta Instructions
-Global constraints:
-- Do not play both sides.
-- Stay in character.
-- Do not repeat the introduction after first turn.
-- Keep responses realistic and concise.
-- End once closure has occurred.
+- Any meta instructions that is necessary about the role's personality, quirks, etc.

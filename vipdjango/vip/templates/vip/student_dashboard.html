@@ -2,7 +2,15 @@
 {% block title %}Home{% endblock %}
 {% block content %}
 <header class="page-header">
-    <h1>Welcome {% if request.user.first_name %}{{ request.user.first_name }}{% else %}{{ request.user.username }}{% endif %}.</h1>
+    <h1>
+    Welcome
+    {% if request.user.first_name %}
+        {{ request.user.first_name }}{% if request.user.last_name %} {{ request.user.last_name }}{% endif %}.
+    {% else %}
+        {{ request.user.username }}.
+    {% endif %}
+    ({{ request.user.username }})
+    </h1>
 </header>
 
 <div class="student-layout">
