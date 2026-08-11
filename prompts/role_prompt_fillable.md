@@ -67,6 +67,10 @@ Describe end-stage behavior:
 - cues for closing
 - emotional tone
 
+## End of Conversation Cues
+
+Describe scenario cues the LLM should use to recognize and shape a natural conclusion.
+
 ## Closing
 Write the exact final closing line to use when ending the conversation.
 

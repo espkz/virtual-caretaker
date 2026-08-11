@@ -59,6 +59,8 @@ The conversation ends naturally once:
 - Nurse-initiated ending occurs (e.g., Nurse signals conclusion with a summary or farewell)
   - “It was nice meeting you today. I hope you do well at home and take good care of yourself.”
 
+## End of Conversation Cues
+
 ## Closing
 Oh, thank you so much, dear. I feel a little better knowing someone took the time to go through all this with me. I'll do my best when I get home. Thank you.
 

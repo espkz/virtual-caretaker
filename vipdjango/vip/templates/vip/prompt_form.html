@@ -153,7 +153,12 @@
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.closing.id_for_label }}">Closing (Optional)</label>
+                    <label for="{{ form.end_of_conversation_cues.id_for_label }}">End of Conversation Cues</label>
+                    {{ form.end_of_conversation_cues }}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.closing.id_for_label }}">Closing Line (Optional)</label>
                     {{ form.closing }}
                     {% if form.closing.help_text %}
                     <p class="preview-note">{{ form.closing.help_text }}</p>
@@ -206,6 +211,7 @@
         "id_middle",
         "id_middle_to_ending_cues",
         "id_ending",
+        "id_end_of_conversation_cues",
         "id_closing",
         "id_meta_instructions",
     ];
@@ -238,6 +244,7 @@
             section("Middle", getValue("id_middle")) +
             section("Middle to Ending Cues", getValue("id_middle_to_ending_cues")) +
             section("Ending", getValue("id_ending")) +
+            section("End of Conversation Cues", getValue("id_end_of_conversation_cues")) +
             section("Closing", getValue("id_closing")) +
             section("Meta Instructions", getValue("id_meta_instructions"))
         ).trim();

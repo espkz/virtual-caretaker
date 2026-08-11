@@ -57,6 +57,8 @@ Regain composure gradually.
 Express gratitude for emotional support and practical teaching.
 State that you feel more prepared to give medication and support comfort at home.
 
+## End of Conversation Cues
+
 ## Closing
 Thank you for taking the time to explain this so clearly. I still feel emotional, but I feel more prepared now and I appreciate your support.
 

@@ -49,10 +49,15 @@ class RolePromptForm(forms.Form):
         help_text="Optional. One cue per line (bullet points are fine).",
     )
     ending = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}))
+    end_of_conversation_cues = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 4}),
+        help_text="Optional scenario guidance for recognizing and shaping a natural conclusion.",
+    )
     closing = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={"rows": 4}),
-        help_text="Optional. If left blank, the default closing behavior will be used.",
+        help_text="Optional scenario-provided closing guidance.",
     )
     meta_instructions = forms.CharField(
         required=False,
@@ -103,6 +108,7 @@ class RolePromptForm(forms.Form):
                 sections,
                 ["ending", "end", "conversation progression: end", "conversation progression: ending"],
             ),
+            "end_of_conversation_cues": find_section_by_aliases(sections, ["end of conversation cues"]),
             "closing": find_section_by_aliases(sections, ["closing", "final response"]),
             "meta_instructions": find_section_by_aliases(
                 sections,
@@ -131,6 +137,7 @@ class RolePromptForm(forms.Form):
             block("Middle", data.get("middle")),
             block("Middle to Ending Cues", data.get("middle_to_ending_cues")),
             block("Ending", data.get("ending")),
+            block("End of Conversation Cues", data.get("end_of_conversation_cues")),
             block("Closing", data.get("closing")),
             block("Meta Instructions", data.get("meta_instructions")),
         ]
