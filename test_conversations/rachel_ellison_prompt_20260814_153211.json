@@ -1,0 +1,258 @@
+{
+  "scenario": "rachel_ellison_prompt",
+  "scenario_file": "/Users/espaek/PycharmProjects/virtual-caretaker/virtual-caretaker/prompts/rachel_ellison_prompt.md",
+  "saved_at": "2026-08-14T22:32:11.819744+00:00",
+  "completion_state": {
+    "complete": true,
+    "stage": "ending",
+    "turn_count": 20
+  },
+  "messages": [
+    {
+      "turn": 1,
+      "sender": "assistant",
+      "content": "Welcome to the virtual patient simulation. Today, you are speaking with Rachel Ellison, the daughter of Margaret Ellison, a 66-year-old woman receiving home health care after a severe brain injury. Rachel is supposed to learn tracheostomy suctioning and PEG tube free-water flushes, but she has questions about her mother's condition before she can focus on the training. When you're ready, introduce yourself as the home-health nurse. Explain that you are here to help teach Rachel to participate in her mother\u2019s care. Offer to answer any questions she has before you begin.",
+      "voice_metadata": "male voice, friendly instructional tone, calm and clear, relatively slow pace"
+    },
+    {
+      "turn": 2,
+      "sender": "student",
+      "content": "Hi Rachel, It's Mike Garbett from the home care nursing team. I'm here to go over some of the care for your mom with you.",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 3,
+      "sender": "assistant",
+      "content": "Nice to meet you. I\u2019m sorry, I\u2019m still just a little overwhelmed seeing her like this. I feel like I don\u2019t know anything. Is she just going to be like this forever?",
+      "voice_metadata": "female voice, tense, worried, emotionally tired, direct but not hostile, natural pauses"
+    },
+    {
+      "turn": 4,
+      "sender": "student",
+      "content": "I can understand feeling overwhelmed. Let me sit with you and answer any questions you have",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 5,
+      "sender": "assistant",
+      "content": "Thank you for sitting with me. I\u2019m scared and overwhelmed, and I need to know if there\u2019s any real chance she\u2019ll wake up or improve. What do you think is the most important thing I should know about her prognosis right now?",
+      "voice_metadata": "female voice, tense, worried, emotionally tired, direct but not hostile, natural pauses"
+    },
+    {
+      "turn": 6,
+      "sender": "student",
+      "content": "Can we start by you telling me what you understand about her condition? What have the doctor's and your brother told you?",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 7,
+      "sender": "assistant",
+      "content": "From what I understand, the doctors described a severe brain injury after the cardiac arrest, and my brother and the team say she is in an unresponsive wakeful state, with eye opening but no reliable response. They\u2019ve said recovery to meaningful interaction is unlikely, though nothing is certain. What would you like me to explain first about what this means for her care today?",
+      "voice_metadata": "female voice, tense, worried, emotionally tired, direct but not hostile"
+    },
+    {
+      "turn": 8,
+      "sender": "student",
+      "content": "Well, I'm here to answer your questions should you need it. it looks like you have a substantial understanding of the situation. Do you have any other questions?",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 9,
+      "sender": "assistant",
+      "content": "Yes, I have another question: is there any realistic chance she could wake up or regain any communication in the coming weeks or months?",
+      "voice_metadata": "female voice, tense, worried, emotionally tired, direct but not hostile, natural pauses"
+    },
+    {
+      "turn": 10,
+      "sender": "student",
+      "content": "Unfortunately, she had severe brain injury from lack of oxygen. A full recovery is not likely. We can hope for small improvements and care for her day to day.",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 11,
+      "sender": "assistant",
+      "content": "You're right, and I appreciate the honesty. I'm scared and trying to stay hopeful, but what does 'small improvements' look like in practical terms for her in the next week?",
+      "voice_metadata": "female voice, tired, overwhelmed, cautiously hopeful"
+    },
+    {
+      "turn": 12,
+      "sender": "student",
+      "content": "Well, if she has a lot of mucus, you can help by helping her with the suctioning, and otherwise, helping her stay in health through the feeding tube.",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 13,
+      "sender": "assistant",
+      "content": "I hear you\u2014mucus suctioning and staying on the feeding plan are part of daily care, but I\u2019m still trying to grasp what 'small improvements' could actually look like in the next week. What is the one concrete change I should watch for in the next few days that would mean she\u2019s improving, even a little?",
+      "voice_metadata": "female voice, tense, overwhelmed, emotionally tired, direct but not hostile"
+    },
+    {
+      "turn": 14,
+      "sender": "student",
+      "content": "Ah, I see. Maybe something along the lines of the mucus amount reducing. If she's acceptng feeding too, that's something to look out for",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 15,
+      "sender": "assistant",
+      "content": "Okay, I\u2019ll watch for mucus reducing as a concrete sign in the next few days. If it drops, would that count as improvement?",
+      "voice_metadata": "female voice, tense, anxious, emotionally tired, trying to stay practical"
+    },
+    {
+      "turn": 16,
+      "sender": "student",
+      "content": "Yes, of course.",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 17,
+      "sender": "assistant",
+      "content": "Okay, in the next 24 to 72 hours, besides mucus reduction, what is the most reliable sign we should look for that would indicate any improvement?\n\n[tense, anxious, trying to stay hopeful]",
+      "voice_metadata": "female voice, tense, worried, emotionally tired, direct but not hostile, natural pauses"
+    },
+    {
+      "turn": 18,
+      "sender": "student",
+      "content": "Well, that would be the main one. Just looking out to see if she's breathing well is good enough.",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 19,
+      "sender": "assistant",
+      "content": "If she\u2019s breathing well and there\u2019s less mucus, would that count as improvement in the next day or two, or should I be watching for something else? [tense, anxious, trying to stay hopeful]",
+      "voice_metadata": "female voice, tense, emotionally tired, direct but hopeful"
+    },
+    {
+      "turn": 20,
+      "sender": "student",
+      "content": "That would definitely be an improvement to look out for.",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 21,
+      "sender": "assistant",
+      "content": "Okay, so besides breathing and mucus, what else should I watch for in the next couple of days that would count as meaningful improvement, even if it's small? [tense, anxious, trying to stay hopeful]",
+      "voice_metadata": "female voice, tense, worried, emotionally tired, direct but not hostile"
+    },
+    {
+      "turn": 22,
+      "sender": "student",
+      "content": "I think those are it. Anything beyond those would be quite the significant improvement, and unfortunately not as likely",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 23,
+      "sender": "assistant",
+      "content": "Okay, I\u2019ll watch for breathing and mucus as the main signs. If there\u2019s no further improvement in the next few days, what should we do next in terms of goals of care? [tense, anxious, trying to stay hopeful]",
+      "voice_metadata": "female voice, tense, worried, emotionally tired, direct but not hostile"
+    },
+    {
+      "turn": 24,
+      "sender": "student",
+      "content": "We'll tackle those one by one, Rachel. It'll be okay. For now, we can focus on making your mother comfortable and take care of her as best as we can",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 25,
+      "sender": "assistant",
+      "content": "That sounds right. I want to focus on what will keep her comfortable today. What would you propose as the first explicit goal of care for now\u2014comfort and avoiding distress, or is there another priority you\u2019d suggest?",
+      "voice_metadata": "female voice, tense, worried, emotionally tired, direct but not hostile, with measured pauses"
+    },
+    {
+      "turn": 26,
+      "sender": "student",
+      "content": "Well, I'm here to show you how to suction, which will help your mother with being comfortable. I just want to answer any other questions that you have before we get started",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 27,
+      "sender": "assistant",
+      "content": "Okay, I\u2019m ready to learn how to suction. Before we start, how will suctioning affect her comfort, and what specific signs should I watch for that would tell me she\u2019s uncomfortable or in distress?\n\n[tense, anxious, trying to stay hopeful]",
+      "voice_metadata": "female voice, tense, worried, emotionally tired, direct but not hostile, natural pauses"
+    },
+    {
+      "turn": 28,
+      "sender": "student",
+      "content": "It'll help reduce the mucus and make her more comfortable that way. If she looks like she's struggling to breathe, that'll be a sign for you to look out for to make her more comfortable.",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 29,
+      "sender": "assistant",
+      "content": "Okay, I\u2019ll watch for signs like harder breathing or distress after suctioning to know if she\u2019s uncomfortable. Would you like me to go ahead with suctioning now, or is there another question you want to cover first?",
+      "voice_metadata": "female voice, tense, anxious, trying to stay hopeful"
+    },
+    {
+      "turn": 30,
+      "sender": "student",
+      "content": "Well, are there any questions you want to ask me?",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 31,
+      "sender": "assistant",
+      "content": "Yes, I do have a question: if she starts showing distress during suctioning, what exactly should I do to pause, ensure her comfort, and who should I contact first?",
+      "voice_metadata": "female voice, tense, anxious, hopeful, seeking honest information"
+    },
+    {
+      "turn": 32,
+      "sender": "student",
+      "content": "You have my number if you need any help. If she starts showing signs of distress, you'll have to be careful in stopping and removing the suction. I can show you how to do so when I show you how to suction",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 33,
+      "sender": "assistant",
+      "content": "If she shows distress during suctioning, I\u2019ll pause and call you right away so you can guide me. In an emergency moment like that, should I contact you first or go straight to the on-call doctor?",
+      "voice_metadata": "female voice, tense, worried, emotionally tired, direct but not hostile, natural pauses"
+    },
+    {
+      "turn": 34,
+      "sender": "student",
+      "content": "If it's an emergency, call the on-call doctor first, then reach out to me. They should respond faster, but doesn't hurt to call multiple people in case",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 35,
+      "sender": "assistant",
+      "content": "That makes sense. I\u2019ll pause and call the on-call doctor first, then you. Is there anything else I should tell them before I proceed?",
+      "voice_metadata": "female voice, tense, worried, emotionally tired, direct but not hostile, natural pauses"
+    },
+    {
+      "turn": 36,
+      "sender": "student",
+      "content": "What do you mean, proceed?",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 37,
+      "sender": "assistant",
+      "content": "Proceed means you would start suctioning; before we begin, what exact words should I tell the on-call doctor and you about pausing if she shows distress?",
+      "voice_metadata": "female voice, tense, anxious, trying to stay hopeful"
+    },
+    {
+      "turn": 38,
+      "sender": "student",
+      "content": "You don't hav eto be perfect, just let us know of the situation, and try to extract the suction as gently as you can. Like I said, I'll show you",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 39,
+      "sender": "assistant",
+      "content": "Proceed means start suctioning; I\u2019ll guide you through it, and if she shows distress we pause. What exact words should I say to pause and who should I contact first?",
+      "voice_metadata": "female voice, tense, anxious, emotionally tired"
+    },
+    {
+      "turn": 40,
+      "sender": "student",
+      "content": "Well, you don't have to say exact words, if she's showing distress that's a stressful situation.Just maintain calm and contact the on-call doctor and me. We'll be there to help you",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 41,
+      "sender": "assistant",
+      "content": "\"Thank you for taking the time to answer my questions. I'm ready for you to show me how the equipment works\"",
+      "voice_metadata": "female voice, tense, anxious, trying to stay hopeful"
+    }
+  ]
+}

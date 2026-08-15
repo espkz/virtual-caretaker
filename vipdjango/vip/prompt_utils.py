@@ -53,3 +53,23 @@ def find_section_by_aliases(sections, aliases):
                 best_score = score
                 best_value = value
     return best_value
+
+
+def extract_fixed_section(text, aliases):
+    """Extract author-provided fixed content, excluding template instructions.
+
+    Scenario role prompts treat the whole section body as author content. Shared
+    templates may wrap their author content in explicit fixed-content markers.
+    """
+    sections = split_markdown_sections(text)
+    value = find_section_by_aliases(sections, aliases).strip()
+    if not value:
+        return ""
+    start_marker = "<!-- fixed-content -->"
+    end_marker = "<!-- /fixed-content -->"
+    if start_marker not in value:
+        return value
+    content = value.split(start_marker, 1)[1]
+    if end_marker in content:
+        content = content.split(end_marker, 1)[0]
+    return content.strip()

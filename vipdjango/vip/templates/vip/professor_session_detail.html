@@ -26,14 +26,14 @@
     <div class="meta-item"><strong>Ended:</strong> {% if session.ended_at %}{{ session.ended_at }}{% else %}In progress{% endif %}</div>
 </div>
 
-{% if messages %}
+{% if rendered_messages %}
 <div class="chat-list">
-    {% for message in messages %}
+    {% for message in rendered_messages %}
     <article class="chat-message {{ message.sender }}">
         <div class="chat-meta">
-            {{ message.get_sender_display }} | {{ message.created_at }}
+            {{ message.sender_display }} | {{ message.created_at }}
         </div>
-        <div class="pre-wrap">{{ message.content }}</div>
+        <div class="pre-wrap">{{ message.display_content }}</div>
     </article>
     {% endfor %}
 </div>

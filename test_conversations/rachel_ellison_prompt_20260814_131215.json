@@ -1,0 +1,68 @@
+{
+  "scenario": "rachel_ellison_prompt",
+  "scenario_file": "/Users/espaek/PycharmProjects/virtual-caretaker/virtual-caretaker/prompts/rachel_ellison_prompt.md",
+  "saved_at": "2026-08-14T20:12:15.707805+00:00",
+  "completion_state": {
+    "complete": false,
+    "stage": "beginning",
+    "turn_count": 5
+  },
+  "messages": [
+    {
+      "turn": 1,
+      "sender": "assistant",
+      "content": "Welcome to the virtual patient simulation. Today, you are speaking with Rachel Ellison, the daughter of Margaret Ellison, a 66-year-old woman receiving home health care after a severe brain injury. Rachel is supposed to learn tracheostomy suctioning and PEG tube free-water flushes, but she has questions about her mother's condition before she can focus on the training. When you're ready, introduce yourself as the home-health nurse. Explain that you are here to help teach Rachel to participate in her mother\u2019s care. Offer to answer any questions she has before you begin."
+    },
+    {
+      "turn": 2,
+      "sender": "student",
+      "content": "Hi Rachel, It's Mike Garbett from the home care nursing team. I'm here to go over some of the care for your mom with you."
+    },
+    {
+      "turn": 3,
+      "sender": "assistant",
+      "content": "Nice to meet you. I\u2019m sorry, I\u2019m still just a little overwhelmed seeing her like this. I feel like I don\u2019t know anything. Is she just going to be like this forever?"
+    },
+    {
+      "turn": 4,
+      "sender": "student",
+      "content": "I can understand feeling overwhelmed. Let me sit with you and answer any questions you have."
+    },
+    {
+      "turn": 5,
+      "sender": "assistant",
+      "content": "Thank you for staying with me. I\u2019m really scared about what comes next\u2014could you explain the prognosis for her waking up or improving, and whether there\u2019s any chance this could happen soon?\n\n[female voice, female]"
+    },
+    {
+      "turn": 6,
+      "sender": "student",
+      "content": "Can we start by you telling me what you understand about her condition? What have the doctor's and your brother told you?"
+    },
+    {
+      "turn": 7,
+      "sender": "assistant",
+      "content": "I understand mom had a cardiac arrest six weeks ago and is in an unresponsive wakeful state with a trach and a PEG. The doctors have told me the prognosis is very poor and the chance of meaningful waking or recovery is small, and my brother has heard similar. What is the most important thing I should know right now?\n\n[female voice, female]"
+    },
+    {
+      "turn": 8,
+      "sender": "student",
+      "content": "There's a lot to take in. Yes she had severe brain injury from lack of oxygen. A full recovery is not likely. We can hope for small improvements and care for her day to day."
+    },
+    {
+      "turn": 9,
+      "sender": "assistant",
+      "content": "I appreciate you explaining that. I\u2019m trying to process this and do what\u2019s best for Mom\u2014what are the first signs that she might need suctioning or a PEG water flush?\n\n[female voice, female]"
+    },
+    {
+      "turn": 10,
+      "sender": "student",
+      "content": "Would you like to start right now? I can help you through the steps if you'd like"
+    },
+    {
+      "turn": 11,
+      "sender": "assistant",
+      "content": "Yes, please guide me through the steps, and could you start by telling me the first sign that suctioning is needed?\n\n[female voice, female]"
+    }
+  ],
+  "voice_metadata": []
+}

@@ -1,0 +1,217 @@
+Available scenarios:
+  1. caregiver_prompt
+  2. peggy_collins_prompt
+  3. rachel_ellison_prompt
+Select scenario [1]: 3
+Scenario: rachel_ellison_prompt
+
+CHARACTER:
+Welcome to the virtual patient simulation. Today, you are speaking with Rachel Ellison, the daughter of Margaret Ellison, a 66-year-old woman receiving home health care after a severe brain injury. Rachel is supposed to learn tracheostomy suctioning and PEG tube free-water flushes, but she has questions about her mother's condition before she can focus on the training. When you're ready, introduce yourself as the home-health nurse. Explain that you are here to help teach Rachel to participate in her mother’s care. Offer to answer any questions she has before you begin.
+VOICE METADATA (not dialogue): male voice, friendly instructional tone, calm and clear, relatively slow pace
+
+YOU: Hi Rachel, It's Mike Garbett from the home care nursing team. I'm here to go over some of the care for your mom with you.
+
+CHARACTER:
+Nice to meet you. I’m sorry, I’m still just a little overwhelmed seeing her like this. I feel like I don’t know anything. Is she just going to be like this forever?
+VOICE METADATA (not dialogue): female voice, tense, worried, emotionally tired, direct but not hostile, natural pauses
+
+YOU: I can understand feeling overwhelmed. Let me sit with you and answer any questions you have.
+
+CHARACTER:
+Thank you for being here. I’m trying to understand what’s realistic, and I’m feeling a lot of fear. Is my mother ever going to wake up?
+VOICE METADATA (not dialogue): female voice, tense, worried, emotionally tired, direct but not hostile
+
+YOU: Can we start by you telling me what you understand about her condition? What have the doctor's and your brother told you?
+
+CHARACTER:
+Honestly, I’m feeling overwhelmed. I understand she’s six weeks post-injury, in an unresponsive state, and the doctors have said the prognosis is guarded with a low likelihood of meaningful recovery. My brother and I are trying to understand what that means for her now—what did the doctors tell you about her chances of waking up or improving at this stage?
+VOICE METADATA (not dialogue): female voice, tense, worried, direct
+
+YOU: Well, she had severe brain injury from lack of oxygen. A full recovery is not likely. We can hope for small improvements and care for her day to day.
+
+CHARACTER:
+Thanks for explaining. I’m trying to understand what you mean by 'small improvements.' Could you give me one concrete example of what that might look like in her situation?
+VOICE METADATA (not dialogue): female voice, tense, wary, emotionally tired
+
+YOU: Sure, some examples would be the mucus in her being reduced. Another small improvement would be her being able to breathe easily without issue
+
+CHARACTER:
+Okay, I hear you. With mucus reduction and easier breathing as the 'small improvements,' is there any realistic chance she could wake up or show awareness at this stage?
+VOICE METADATA (not dialogue): female voice, tense, exhausted, cautious
+
+YOU: Unfortunately, no. In short term it's definitely not likely, but we can hope for something better as we keep taking care of her
+
+CHARACTER:
+That’s hard to hear. If waking up isn’t likely, what would 'better' look like for her comfort and daily care?
+VOICE METADATA (not dialogue): female voice, tense, worried, direct but not hostile
+
+YOU: Well, breathing easily is probably one of the biggest signs. We'll be going over how to make your mother comfortable
+
+CHARACTER:
+Breathing easier would be a big relief for her and for me. What comfort measures should we start with right away?
+VOICE METADATA (not dialogue): female voice, tense, worried, emotionally tired, direct but not hostile
+
+YOU: Since I'm here to show you how to do the suction, we can start with that if you don't have any more questions for me
+
+CHARACTER:
+I'm ready to learn, but I need to understand first—what signs should we watch for that indicate she needs suctioning, and what will you do to keep her comfortable during the procedure?
+VOICE METADATA (not dialogue): female voice, tense, worried, emotionally tired, direct but not hostile
+
+YOU: /status
+Scenario: rachel_ellison_prompt
+Stage: beginning
+Turn count: 8
+Complete: False
+
+YOU: One of the ways to keep her comfortable is to make sure her airway is clear. That's where you'll come in to help her by using the suction to clear the mucus
+ 
+CHARACTER:
+That makes sense. What specific signs should I watch for that tell me she needs suctioning?
+VOICE METADATA (not dialogue): female voice, tense, worried, practical
+
+YOU: /status
+Scenario: rachel_ellison_prompt
+Stage: beginning
+Turn count: 9
+Complete: False
+
+YOU: If she's breathing easily or there's signs of coughing, that's a good sign. Otherwise, you're going to have to use the suction
+
+CHARACTER:
+That makes sense. If she isn’t coughing or in distress, I should wait; how often should I suction if mucus keeps building up?
+VOICE METADATA (not dialogue): female voice, tense, cautious, emotionally tired
+
+YOU: /status
+Scenario: rachel_ellison_prompt
+Stage: beginning
+Turn count: 10
+Complete: False
+
+YOU: Check on her at least once a day. That should be enough.
+
+CHARACTER:
+That scares me—shouldn’t there be more frequent checks than once a day?
+VOICE METADATA (not dialogue): female voice, tense, protective, exhausted
+
+YOU: /status
+Scenario: rachel_ellison_prompt
+Stage: beginning
+Turn count: 11
+Complete: False
+
+YOU: You can if you'd like to, it's usually that patients need it once. The mucus takes time to build, after all
+
+CHARACTER:
+That sounds like it’s only once a day, but I’m scared we’ll miss something. What signs would mean we need suctioning more often, and who gets to decide that?
+VOICE METADATA (not dialogue): female voice, tense, worried, emotionally tired, direct
+
+YOU: Like I've said, you can check for her breathing. If it looks like she has difficulty breathing, that means another suctioning may be needed. I can teach you what signs to look for
+
+CHARACTER:
+Okay, I’m listening. I’m really worried I’ll miss something. What exact signs should I watch for to decide when to suction?
+VOICE METADATA (not dialogue): female voice, tense, worried, emotionally tired
+
+YOU: /status
+Scenario: rachel_ellison_prompt
+Stage: beginning
+Turn count: 13
+Complete: False
+
+YOU: What do you mean? Do you mean for looking for signs for more suctioning while doing the suction?
+
+CHARACTER:
+Yes, during suctioning, what exact signs should I watch for that mean we need to suction again right away?
+VOICE METADATA (not dialogue): female voice, tense, cautious, emotionally exhausted
+
+YOU: Oh, you don't need to worry about suctioning again immediately. The mucus won't build that quickly. You'll have at least several hours afterwards
+
+CHARACTER:
+Okay, that helps a little, but if she starts struggling to breathe in those hours, what’s the first thing I should do and who should I call for help?
+VOICE METADATA (not dialogue): female voice, tense, overwhelmed, seeking clear steps
+
+YOU: /status
+Scenario: rachel_ellison_prompt
+Stage: beginning
+Turn count: 15
+Complete: False
+
+YOU: That'll mean she requires another suction, but if you think it's a different issue, you can always acall the doctor on-call or me
+
+CHARACTER:
+I’m so scared I’ll miss something—if she starts to have trouble breathing, should I call 911 right away or contact the on‑call doctor first?
+VOICE METADATA (not dialogue): female voice, tense, worried
+
+YOU: It's okay, Rachel. You can call the on-call doctor first — they'll know what to do
+
+CHARACTER:
+Okay, I can call the on‑call doctor first. I’m really scared I’ll miss something if her breathing changes suddenly—what exact information should I give them about her breathing and mucus so they understand how urgent this is?
+VOICE METADATA (not dialogue): female voice, tense, anxious, seeking clarity
+
+YOU: If you call them, they'll be there. No need to worry. You can explain her breathing pattern to the doctor
+
+CHARACTER:
+Okay, I’ll call the on‑call doctor. What exact details about her breathing should I share to convey urgency—the rate, effort, presence of mucus, pauses, and any changes from baseline?
+VOICE METADATA (not dialogue): female voice, tense, worried, direct
+
+YOU: /status
+Scenario: rachel_ellison_prompt
+Stage: beginning
+Turn count: 18
+Complete: False
+
+YOU: Any changes from the baseline should be enough, you can provide more details if you want to, but the on-call doctor will also make their examinations once they're with your mother
+
+CHARACTER:
+Okay, I’ll track any changes from her baseline. Should I call the on‑call doctor right away if I notice a change, or report it to you first before I call?
+VOICE METADATA (not dialogue): female voice, tense, worried, direct
+
+YOU: /status
+Scenario: rachel_ellison_prompt
+Stage: beginning
+Turn count: 19
+Complete: False
+
+YOU: The on-call doctor should be more responsive, call them first before reaching me
+
+CHARACTER:
+Okay, I’ll call the on‑call doctor first if I notice a change in her breathing. What exact details should I give them on the call to convey urgency?
+VOICE METADATA (not dialogue): female voice, soft, anxious, determined
+
+YOU: They'll be apprised of your mother's situation, don't worry. Just tell them that Margaret Ellison is having some problems with breathing, or there's a change, and they'll be there
+
+CHARACTER:
+Okay, I’ll do that. I’m still scared I’ll miss something, but I’ll call the on‑call doctor if there’s any change and tell them Margaret is having breathing problems or a change from her baseline. What exact details should I share on the call to convey urgency?
+VOICE METADATA (not dialogue): female voice, tense, worried, seeking reassurance
+
+YOU: /status
+Scenario: rachel_ellison_prompt
+Stage: beginning
+Turn count: 21
+Complete: False
+
+YOU: There's no right answer to this, Rachel. I think that if you convey what you can to the doctor, they'll understand
+
+CHARACTER:
+Okay, I’ll try. What are the top three things I should tell the on-call doctor to convey urgency so they understand how things are changing?
+VOICE METADATA (not dialogue): female voice, tense, worried, direct
+
+YOU: /status
+Scenario: rachel_ellison_prompt
+Stage: beginning
+Turn count: 22
+Complete: False
+
+YOU: Do you need a guide? It's more of telling them that her breathing is different, or if she has trouble breathing, something like that. It'll be different every time, so getting an exact list is difficult
+
+CHARACTER:
+That makes sense, I’m scared I’ll miss something. Is there a simple starting line I can use on the call to signal urgency, and then add the exact changes I’ve observed?
+VOICE METADATA (not dialogue): female voice, tense, worried, direct
+
+YOU: ...there really isn't, Rachel. To be blunt, you're overthinking this. Just say what you're seeing
+
+CHARACTER:
+Thank you for taking the time to answer my questions. I'm ready for you to show me how the equipment works
+VOICE METADATA (not dialogue): female voice, tense, worried, direct
+
+Conversation complete.
+Saved transcript: /Users/espaek/PycharmProjects/virtual-caretaker/virtual-caretaker/test_conversations/rachel_ellison_prompt_20260814_173034.json

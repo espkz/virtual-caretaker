@@ -1,0 +1,57 @@
+import unittest
+
+from vip.conversation_graph import MAX_TURNS, TARGET_TURNS, _phase_for_turn, build_conversation_graph
+
+
+class ConversationGraphTests(unittest.TestCase):
+    def test_phase_is_pressure_not_stage_progression(self):
+        self.assertEqual(_phase_for_turn(10), "normal")
+        self.assertEqual(_phase_for_turn(17), "resolution_guidance")
+        self.assertEqual(_phase_for_turn(TARGET_TURNS), "closure_preference")
+        self.assertGreater(MAX_TURNS, TARGET_TURNS)
+
+    def test_stage_transition_requires_explicit_readiness(self):
+        def respond(state):
+            return "response", "female voice, tense", "middle", False, False, {
+                "stage_transition_ready": False,
+                "reason": "llm_turn",
+            }
+
+        graph = build_conversation_graph(respond)
+        result = graph.invoke({"current_turn": 5, "current_stage": "beginning", "max_turns": 22})
+        self.assertEqual(result["current_stage"], "beginning")
+        self.assertFalse(result["stage_transition_ready"])
+        self.assertEqual(result["voice_metadata"], "female voice, tense")
+
+    def test_stage_can_advance_early_when_cues_are_ready(self):
+        def respond(state):
+            return "response", "female voice, tense", "middle", False, False, {
+                "stage_transition_ready": True,
+                "reason": "llm_turn",
+            }
+
+        graph = build_conversation_graph(respond)
+        result = graph.invoke({"current_turn": 2, "current_stage": "beginning", "max_turns": MAX_TURNS})
+        self.assertEqual(result["current_stage"], "middle")
+        self.assertTrue(result["stage_transition_ready"])
+
+    def test_target_turn_does_not_force_completion(self):
+        def respond(state):
+            return "continue", "female voice, tense", "middle", False, False, {
+                "stage_transition_ready": True,
+                "reason": "llm_turn",
+            }
+
+        graph = build_conversation_graph(respond)
+        result = graph.invoke({
+            "current_turn": TARGET_TURNS,
+            "current_stage": "beginning",
+            "max_turns": MAX_TURNS,
+        })
+        self.assertFalse(result["completion_status"])
+        self.assertFalse(result["complete"])
+        self.assertEqual(result["current_stage"], "middle")
+
+
+if __name__ == "__main__":
+    unittest.main()

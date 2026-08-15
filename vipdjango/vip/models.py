@@ -34,6 +34,9 @@ class ChatSession(models.Model):
     )
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
+    conversation_stage = models.CharField(max_length=20, default="beginning")
+    conversation_phase = models.CharField(max_length=32, default="normal")
+    completion_status = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Session {self.id} - {self.student}"
@@ -51,6 +54,7 @@ class ChatMessage(models.Model):
     )
     sender = models.CharField(max_length=20, choices=Sender.choices)
     content = models.TextField()
+    voice_metadata = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

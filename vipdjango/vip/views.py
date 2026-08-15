@@ -2,6 +2,7 @@ import os
 import re
 import io
 import csv
+import json
 import logging
 from pathlib import Path
 from urllib.parse import urlencode
@@ -29,14 +30,11 @@ from .forms import (
 )
 from .models import ChatMessage, ChatSession, RolePrompt
 from .prompt_utils import find_section_by_aliases, split_markdown_sections
+from .conversation_graph import MAX_TURNS
+from .conversation_engine import ConversationEngine, split_dialogue_and_voice
+from .conversation_scenario import parse_scenario_prompt
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_META_INSTRUCTIONS = (
-    "Do not play both sides. Stay in character. "
-    "Do not restart the introduction once conversation has begun."
-)
-
 
 def _prompt_file_path(filename):
     candidates = [
@@ -92,26 +90,11 @@ def _parse_role_config(role_text):
             sections,
             ["beginning to middle cues", "begin-to-middle cues", "middle trigger", "middle triggers", "trigger"],
         ),
-        "end_cues": find_section_by_aliases(
-            sections,
-            ["middle to ending cues", "middle-to-ending cues", "ending trigger", "ending triggers"],
+        "middle_to_ending_cues": find_section_by_aliases(
+            sections, ["middle to ending cues", "middle-to-ending cues", "ending triggers", "ending trigger"]
         ),
+        "end_of_conversation_cues": find_section_by_aliases(sections, ["end of conversation cues"]),
     }
-
-
-def _parse_cues(text):
-    if not text:
-        return []
-    cues = []
-    for raw in text.splitlines():
-        line = raw.strip().lstrip("-").strip().lower()
-        if not line:
-            continue
-        if "," in line:
-            cues.extend([part.strip() for part in line.split(",") if part.strip()])
-        else:
-            cues.append(line)
-    return cues
 
 
 def _enforce_voice_format(text, voice_gender, voice_style):
@@ -123,24 +106,36 @@ def _enforce_voice_format(text, voice_gender, voice_style):
     found = re.findall(r"\[([^\]]+)\]", text, flags=re.DOTALL)
     if not found:
         return f"{text}\n\n[{voice_gender} voice, {voice_style}]"
-    last = found[-1].lower()
-    if "male voice" not in last and "female voice" not in last:
-        return re.sub(
-            r"\[([^\]]+)\]\s*$",
-            f"[{voice_gender} voice, {found[-1].strip()}]",
-            text,
-            count=1,
-            flags=re.DOTALL,
-        )
-    return text
+    raw = found[-1].strip()
+    normalized = raw.lower().strip()
+    bare_gender = {voice_gender, f"{voice_gender} voice", f"{voice_gender} voice, {voice_gender}"}
+    if normalized in bare_gender:
+        raw = voice_style
+    elif not re.search(r"\b(?:male|female)\s+voice\b", normalized):
+        raw = f"{voice_gender} voice, {raw}"
+    return re.sub(
+        r"\[([^\]]+)\]\s*$",
+        f"[{raw}]",
+        text,
+        count=1,
+        flags=re.DOTALL,
+    )
 
 
-def _conversation_history_text(session_messages):
-    conversation_lines = []
+def _conversation_messages(session_messages):
+    """Convert persisted conversational messages into native LLM message roles."""
+    messages = []
     for message in session_messages:
-        label = "Student" if message.sender == ChatMessage.Sender.STUDENT else "Assistant"
-        conversation_lines.append(f"{label}: {message.content}")
-    return "\n".join(conversation_lines).strip()
+        if message.sender not in {ChatMessage.Sender.STUDENT, ChatMessage.Sender.ASSISTANT}:
+            continue
+        content = message.content
+        if message.sender == ChatMessage.Sender.ASSISTANT:
+            content, _ = split_dialogue_and_voice(content)
+        messages.append({
+            "role": "user" if message.sender == ChatMessage.Sender.STUDENT else "assistant",
+            "content": content,
+        })
+    return messages
 
 
 def _load_api_key_from_txt():
@@ -158,200 +153,72 @@ def _load_api_key_from_txt():
 
 
 def _parse_dialogue_and_emotion(text):
-    match = re.match(r"^(.*?)(\[.*\])?$", text.strip(), re.DOTALL)
-    if not match:
-        return text, ""
-    dialogue = match.group(1).strip()
-    emotion = match.group(2).strip("[]") if match.group(2) else ""
-    return dialogue, emotion
+    return split_dialogue_and_voice(text)
 
 
 def _clean_for_tts(text):
     return re.sub(r"\([^)]*\)", "", text).strip()
 
 
-def _normalize_for_close_match(text):
-    value = (text or "").lower()
-    value = re.sub(r"\[[^\]]*\]", " ", value)
-    value = re.sub(r"[^a-z0-9\s]", " ", value)
-    return re.sub(r"\s+", " ", value).strip()
-
-
-def _generate_assistant_response(role_text, session_messages):
+def _detect_stop_request(message_text):
+    """Use the model for semantic interrupt intent instead of phrase matching."""
     api_key = _load_api_key_from_txt()
-    if not api_key:
-        return "OpenAI API key is not configured on the server yet.", False, {"stage": "error", "reason": "missing_api_key"}
-
+    if not api_key or not message_text:
+        return False
     try:
         from openai import OpenAI
 
+        payload = [
+            {
+                "role": "system",
+                "content": (
+                    "Classify only whether the learner is clearly requesting that the conversation stop now. "
+                    "Return true for an explicit request to end or stop the conversation. Return false when the "
+                    "learner is continuing roleplay, discussing a scenario ending, expressing thanks while asking "
+                    "another question, or otherwise has not clearly requested stopping."
+                ),
+            },
+            {"role": "user", "content": message_text},
+        ]
+        logger.debug("LLM interrupt classifier payload:\n%s", json.dumps(payload, ensure_ascii=False, indent=2))
         client = OpenAI(api_key=api_key)
-        config = _parse_role_config(role_text)
-        meta_instructions = (config.get("meta") or "").strip() or DEFAULT_META_INSTRUCTIONS
-        template_prefix = _extract_template_prefix()
-        history = _conversation_history_text(session_messages)
-        assistant_count = sum(1 for m in session_messages if m.sender == ChatMessage.Sender.ASSISTANT)
-        last_user = ""
-        for message in reversed(session_messages):
-            if message.sender == ChatMessage.Sender.STUDENT:
-                last_user = message.content.strip().lower()
-                break
-
-        close_phrases = [
-            "thank you",
-            "thanks",
-            "goodbye",
-            "bye",
-            "that is all",
-            "no that's all",
-            "no, that's all",
-            "nothing else",
-            "we're done",
-            "that covers everything",
-        ]
-        should_close = any(p in last_user for p in close_phrases)
-        begin_to_middle_cues = _parse_cues(config["begin_cues"]) or [
-            "home",
-            "medication",
-            "medicine",
-            "daily",
-            "routine",
-            "help",
-            "support",
-            "safety",
-            "family",
-            "caregiver",
-            "hospice",
-            "feeding",
-            "pain",
-        ]
-        middle_to_ending_cues = _parse_cues(config["end_cues"]) or [
-            "anything else",
-            "before we finish",
-            "summarize",
-            "wrap up",
-            "closing",
-            "goodbye",
-            "thanks",
-            "stop conversation",
-            "end conversation",
-            "finish this conversation",
-        ]
-        ending_intent_phrases = [
-            "i want to stop",
-            "can we stop",
-            "let's stop",
-            "i want to end this",
-            "end this conversation",
-            "stop this conversation",
-            "we can end here",
-            "i think we're done for now",
-        ]
-
-        user_history = " ".join(
-            m.content.strip().lower() for m in session_messages if m.sender == ChatMessage.Sender.STUDENT
-        )
-        has_middle_signal = any(c in user_history for c in begin_to_middle_cues)
-        has_ending_signal = any(c in user_history for c in middle_to_ending_cues)
-        has_ending_intent = any(p in last_user for p in ending_intent_phrases)
-
-        stage = "beginning"
-        if assistant_count == 0:
-            stage = "intro"
-        elif has_ending_signal or has_ending_intent:
-            stage = "ending"
-        elif has_middle_signal:
-            stage = "middle"
-
-        if should_close:
-            stage = "closing"
-
-        if stage == "intro":
-            intro = config["introduction"] or "Hello, I am ready to begin this roleplay."
-            return _enforce_voice_format(
-                intro,
-                config["intro_voice_gender"],
-                config["intro_voice_style"],
-            ), False, {"stage": stage, "reason": "first_assistant_turn"}
-
-        if stage == "beginning" and assistant_count == 1 and config["opening_line"]:
-            return _enforce_voice_format(
-                config["opening_line"],
-                config["voice_gender"],
-                config["voice_style"],
-            ), False, {"stage": stage, "reason": "hardcoded_opening_line"}
-
-        if stage == "closing":
-            closing = config["closing"] or (
-                "Thank you for this conversation. I appreciate your help today."
-            )
-            return _enforce_voice_format(closing, config["voice_gender"], config["voice_style"]), True, {
-                "stage": stage,
-                "reason": "closing_stage_selected",
-            }
-
-        stage_instructions = config.get(stage, "") or config["middle"] or config["role"]
-        system_prompt = (
-            f"{template_prefix}\n\n"
-            "You are a standardized roleplay participant in a structured state-machine conversation.\n"
-            "Do not play both sides.\n"
-            "Do not restart introduction.\n"
-            f"Learner role: {config['learner_role']}\n"
-            f"Voice must be bracketed with '{config['voice_gender']} voice'.\n"
-            f"Meta instructions:\n{meta_instructions}\n"
-            "Output format:\n"
-            "Dialogue\n\n"
-            f"[{config['voice_gender']} voice, style instructions]"
-        )
-        user_prompt = (
-            f"Character profile:\n{config['role']}\n\n"
-            f"Current stage: {stage}\n"
-            f"Stage instructions:\n{stage_instructions}\n\n"
-            f"Conversation so far:\n{history}\n\n"
-            "Respond in character."
-        )
         response = client.responses.create(
-            model="gpt-4o-mini",
-            input=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            model="gpt-5-nano",
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "conversation_interrupt",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"stop_requested": {"type": "boolean"}},
+                        "required": ["stop_requested"],
+                        "additionalProperties": False,
+                    },
+                    "strict": True,
+                }
+            },
+            input=payload,
         )
-        text = response.output_text or "The assistant returned an empty response."
-        assistant_text = _enforce_voice_format(text, config["voice_gender"], config["voice_style"])
+        return bool(json.loads(response.output_text or "{}").get("stop_requested"))
+    except Exception:
+        logger.exception("Unable to classify conversation interrupt request")
+        return False
 
-        # Auto-close once the assistant has delivered the concluding line/content.
-        assistant_dialogue, _ = _parse_dialogue_and_emotion(assistant_text)
-        assistant_norm = _normalize_for_close_match(assistant_dialogue)
-        configured_closing_norm = _normalize_for_close_match(config.get("closing", ""))
-        close_markers = [
-            "thank you for this conversation",
-            "thank you for engaging with virtual conversation simulation",
-            "please remember to download your conversation record",
-            "goodbye",
-            "take care",
-        ]
-        content_signals_close = False
-        if configured_closing_norm and (
-            configured_closing_norm in assistant_norm or assistant_norm in configured_closing_norm
-        ):
-            content_signals_close = True
-        elif any(marker in assistant_norm for marker in close_markers):
-            content_signals_close = True
 
-        should_auto_close = should_close or (stage in {"ending", "closing"} and content_signals_close)
-        return assistant_text, should_auto_close, {
-            "stage": stage,
-            "assistant_count": assistant_count,
-            "has_middle_signal": has_middle_signal,
-            "has_ending_signal": has_ending_signal,
-            "has_ending_intent": has_ending_intent,
-            "user_requested_close": should_close,
-            "content_signals_close": content_signals_close,
-            "reason": "late_stage_close_signal" if should_auto_close else "continue",
+def _generate_assistant_response(role_text, session_messages, session=None):
+    api_key = _load_api_key_from_txt()
+    if not api_key:
+        return "OpenAI API key is not configured on the server yet.", False, {"stage": "error", "reason": "missing_api_key"}
+    engine = ConversationEngine(_extract_template_prefix(), api_key)
+    conversation_state = None
+    if session is not None:
+        conversation_state = {
+            "current_stage": session.conversation_stage,
+            "conversation_stage": session.conversation_stage,
+            "phase": session.conversation_phase,
+            "completion_status": session.completion_status,
         }
-    except Exception as exc:
-        return f"Assistant error: {exc}", False, {"stage": "error", "reason": str(exc)}
+    return engine.respond(role_text, list(session_messages), conversation_state=conversation_state)
 
 
 def _clean_name_part(value):
@@ -918,6 +785,7 @@ def professor_session_detail(request, session_id):
         {
             "session": session,
             "messages": messages,
+            "rendered_messages": _rendered_chat_messages(session, "Student"),
         },
     )
 
@@ -1133,6 +1001,13 @@ def _chat_dashboard(
                     force_new,
                 )
 
+                if not error_message:
+                    completed_turns = current_session.messages.filter(
+                        sender=ChatMessage.Sender.STUDENT
+                    ).count()
+                    if completed_turns >= MAX_TURNS:
+                        error_message = "This conversation is already complete."
+
             if error_message:
                 return render(
                     request,
@@ -1148,30 +1023,60 @@ def _chat_dashboard(
                     ),
                 )
 
+            existing_messages = current_session.messages.order_by("created_at")
+            has_assistant_message = existing_messages.filter(sender=ChatMessage.Sender.ASSISTANT).exists()
+            if not has_assistant_message:
+                scenario = parse_scenario_prompt(selected_prompt.content)
+                introduction = scenario.introduction
+                if introduction:
+                    ChatMessage.objects.create(
+                        session=current_session,
+                        sender=ChatMessage.Sender.ASSISTANT,
+                        content=introduction,
+                        voice_metadata=scenario.voice_metadata(introduction=True),
+                    )
+
             ChatMessage.objects.create(
                 session=current_session,
                 sender=ChatMessage.Sender.STUDENT,
                 content=user_text,
             )
 
-            assistant_text, should_auto_close, debug_info = _generate_assistant_response(
+            assistant_text, conversation_complete, debug_info = _generate_assistant_response(
                 selected_prompt.content,
                 current_session.messages.order_by("created_at"),
+                current_session,
             )
-            ChatMessage.objects.create(
-                session=current_session,
-                sender=ChatMessage.Sender.ASSISTANT,
-                content=assistant_text,
+            if assistant_text:
+                ChatMessage.objects.create(
+                    session=current_session,
+                    sender=ChatMessage.Sender.ASSISTANT,
+                    content=assistant_text,
+                    voice_metadata=debug_info.get("voice_metadata", ""),
+                )
+            current_session.conversation_stage = debug_info.get(
+                "current_stage", current_session.conversation_stage
+            )
+            current_session.conversation_phase = debug_info.get(
+                "phase", current_session.conversation_phase
+            )
+            current_session.completion_status = conversation_complete
+            current_session.save(
+                update_fields=[
+                    "conversation_stage",
+                    "conversation_phase",
+                    "completion_status",
+                ]
             )
             logger.debug(
-                "Chat response generated: user=%s session=%s stage=%s auto_close=%s reason=%s",
+                "Chat response generated: user=%s session=%s phase=%s complete=%s reason=%s",
                 request.user.username,
                 current_session.id,
-                debug_info.get("stage"),
-                should_auto_close,
+                debug_info.get("phase"),
+                conversation_complete,
                 debug_info.get("reason"),
             )
-            if should_auto_close and current_session.ended_at is None:
+            if conversation_complete and current_session.ended_at is None:
                 current_session.ended_at = timezone.now()
                 current_session.save(update_fields=["ended_at"])
             return redirect(_chat_url(view_name, selected_prompt, session=current_session.id, autoplay=1))
@@ -1243,7 +1148,10 @@ def student_download_session(request, session_id):
     ]
     for message in messages:
         speaker = "Student" if message.sender == ChatMessage.Sender.STUDENT else "Assistant"
-        lines.append(f"[{message.created_at}] {speaker}: {message.content}")
+        content = message.content
+        if message.sender == ChatMessage.Sender.ASSISTANT:
+            content, _ = split_dialogue_and_voice(content)
+        lines.append(f"[{message.created_at}] {speaker}: {content}")
         lines.append("")
 
     response = HttpResponse("\n".join(lines), content_type="text/plain")
@@ -1268,7 +1176,8 @@ def student_message_tts(request, message_id):
     if not api_key:
         return HttpResponseBadRequest("API key is not configured.")
 
-    dialogue, emotion = _parse_dialogue_and_emotion(message.content)
+    dialogue, embedded_emotion = split_dialogue_and_voice(message.content)
+    emotion = getattr(message, "voice_metadata", "") or embedded_emotion
     use_emotion_voice = request.GET.get("emotion", "1") != "0"
 
     try:
@@ -1283,14 +1192,14 @@ def student_message_tts(request, message_id):
             response = tts_client.audio.speech.create(
                 model="gpt-4o-mini-tts",
                 voice=voice,
-                input=dialogue or message.content,
+                input=dialogue or "No spoken dialogue.",
                 instructions=emotion or "Speak naturally and clearly.",
             )
             return HttpResponse(response.read(), content_type="audio/mpeg")
 
         from gtts import gTTS
 
-        clean_text = _clean_for_tts(dialogue or message.content)
+        clean_text = _clean_for_tts(dialogue)
         audio_buffer = io.BytesIO()
         tts = gTTS(text=clean_text or "No content", lang="en")
         tts.write_to_fp(audio_buffer)
