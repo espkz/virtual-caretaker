@@ -1006,7 +1006,7 @@ def _chat_dashboard(
                         sender=ChatMessage.Sender.STUDENT
                     ).count()
                     if completed_turns >= MAX_TURNS:
-                        error_message = "This conversation is already complete."
+                        error_message = "This conversation reached its safety limit before a natural ending."
 
             if error_message:
                 return render(

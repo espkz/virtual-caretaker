@@ -1,0 +1,190 @@
+Available scenarios:
+  1. caregiver_prompt
+  2. peggy_collins_prompt
+  3. rachel_ellison_prompt
+Select scenario [1]: 3
+Scenario: rachel_ellison_prompt
+
+CHARACTER:
+Welcome to the virtual patient simulation. Today, you are speaking with Rachel Ellison, the daughter of Margaret Ellison, a 66-year-old woman receiving home health care after a severe brain injury. Rachel is supposed to learn tracheostomy suctioning and PEG tube free-water flushes, but she has questions about her mother's condition before she can focus on the training. When you're ready, introduce yourself as the home-health nurse. Explain that you are here to help teach Rachel to participate in her mother’s care. Offer to answer any questions she has before you begin.
+
+[male voice, friendly instructional tone, calm and clear, relatively slow pace]
+
+YOU: Hi Rachel, It's Mike Garbett from the home care nursing team. I'm here to go over some of the care for your mom with you.
+
+CHARACTER:
+Nice to meet you. I’m sorry, I’m still just a little overwhelmed seeing her like this. I feel like I don’t know anything. Is she just going to be like this forever?
+
+[female voice, tense, worried, emotionally tired, direct but not hostile, natural pauses]
+
+YOU: I can understand feeling overwhelmed. Let me sit with you and answer any questions you have.
+
+CHARACTER:
+Thank you for being here. I’m really overwhelmed. Is she ever going to wake up?
+
+[female voice, tense, worried, emotionally tired]
+
+YOU: Well, can we start by you telling me what you understand about her condition? What have the doctor's and your brother told you?
+
+CHARACTER:
+From what I understand, Mom had a severe brain injury from the hypoxic event six weeks ago, and she’s in an unresponsive wakeful state with no reliable signs of awareness. My brother and I are trying to understand what that prognosis really means and what the next steps could be. Is there any realistic chance of meaningful recovery in the coming weeks?
+
+[female voice, tense, worried, emotionally tired, direct]
+
+YOU: /status
+Scenario: rachel_ellison_prompt
+Stage: middle
+Turn count: 3
+Complete: False
+
+YOU: Well, she had severe brain injury from lack of oxygen. A full recovery is not likely. We can hope for small improvements and care for her day to day.
+
+CHARACTER:
+That helps me hear there might be small improvements, but I’m still scared we’ll never see real recovery. What would those small changes look like, and how would we know if they’re meaningful?
+
+[female voice, tense, worried, emotionally tired]
+
+YOU: /status
+Scenario: rachel_ellison_prompt
+Stage: middle
+Turn count: 4
+Complete: False
+
+YOU: Sure, some examples would be the mucus in her being reduced. Another small improvement would be her being able to breathe easily without issue. If we see these, this means her body is maintaining its functions which is crucial for her recovery
+
+CHARACTER:
+That helps me hear what to look for. If mucus decreases and breathing feels easier, how would we know whether that's meaningful progress toward waking up or just keeping her stable day to day?
+
+[female voice, tense, worried, direct but not hostile, with natural pauses]
+
+YOU: It'll keep her stable, if there are other signs, like her trying to speak or opening her eyes, those will also be meaningful. But as of now it's unlikely and we just have to make sure she's comfortable. That's where you'll be coming in to help
+
+CHARACTER:
+Okay, I’ll focus on her comfort and be ready to help. If she shows a sign of awareness—eyes opening a bit or a small movement—what should I do first to keep her comfortable and let you know?
+
+[female voice, tense, protective, exhausted]
+
+YOU: /status
+Scenario: rachel_ellison_prompt
+Stage: middle
+Turn count: 6
+Complete: False
+
+YOU: Call the on-call doctor first, they should be able to come over right away. You can then check to make sure she's comfortable - her breathing's okay, minimal mucus, things like that. The doctor will take care of the rest.
+
+CHARACTER:
+Okay, I’ll call the on-call doctor right away and keep her comfortable.
+
+[female voice, tense, cautious]
+
+YOU: /status
+Scenario: rachel_ellison_prompt
+Stage: middle
+Turn count: 7
+Complete: False
+
+YOU: Excellent. Do you have any more questions? I'm here to help you get through this as much as I'm here to help teach you how to use the suction for your mother. If you don't, we can get started
+
+CHARACTER:
+Yes, I have questions. How soon can we expect the on-call doctor to arrive after I call?
+
+[female voice, tense, worried, and direct]
+
+YOU: Within three to five minutes. They'll be on standby, so once they get your call, they'll be here as fast as they're able
+
+CHARACTER:
+Okay, that’s fast. When the on-call doctor arrives, will they be able to tell us if there’s any realistic chance of waking up, or will they focus on comfort and what’s possible now?
+
+[female voice, tense, worried, direct]
+
+YOU: Definitely the latter, unfortunately we don't have enough information to discern the future possibilities.  
+
+CHARACTER:
+Okay, I understand. In practical terms, what does 'focus on comfort and what's possible now' look like for Mom today?
+
+[female voice, tense, cautious, seeking honesty]
+
+YOU: Well, that's where you'll be coming in. You'll help her clear of any excess mucus that forms in her body. I'll teach you how to use the suction, and teach you how to use the feeding tube to make sure she gets the nutrients she needs.
+
+CHARACTER:
+Okay, I hear you. This is a lot to absorb, and I want to do it right. What specific signs should I watch for that mean she needs suctioning?
+
+[female voice, soft, exhausted but determined]
+
+YOU: At certain points, it might look like her breathing becomes swallow. Don't panic - it just means that the mucus is beginning to accummulate. If you take that opportunity to use the suction, she'll be clear of the mucus and be able to breathe more easily
+
+CHARACTER:
+Okay, I hear you.
+
+[female voice, tense, protective, emotionally tired]
+
+YOU: /status
+Scenario: rachel_ellison_prompt
+Stage: middle
+Turn count: 12
+Complete: False
+
+YOU: Alright. Do you have any other questions? Of course, even if you don't have more now, you have my number to ask me. I'll answer as promptly as I can.
+
+CHARACTER:
+Yes, I have one more question for now: how long can someone stay in an unresponsive wakeful state like this, and what signs should we watch over the coming weeks to know if she's improving or deteriorating?
+
+[female voice, tense, worried, direct]
+
+YOU: I can't say for sure, but with the treatment that we're giving her right now she'll have several more weeks at the least. If she's in a stable state, and shows signs of stirring, that will definitely mean she's improvement. If she's deteriorating, I'm sorry but you'll see that she'll require suctioning more often. But we'll keep monitoring her to see if anything changes.
+
+CHARACTER:
+That helps me hear what to expect, but it’s still hard.
+
+[female voice, tense, exhausted, protective]
+
+YOU: I know, and I understand. But we're here to make your mother as comfortable as possible, so that if she wakes up, she'll be comfortable, or if she passes on, she'll at least be comfortable to the end.
+
+CHARACTER:
+It's a lot to carry, and I appreciate your honesty. What's the single most important thing I should watch for tonight to keep her comfortable?
+
+[female voice, anxious, protective, exhausted]
+
+YOU: /status                       
+Scenario: rachel_ellison_prompt
+Stage: middle
+Turn count: 15
+Complete: False
+
+YOU: Definitely check for her breathing. She's breathing easily right now, but if anything changes, let me or the on-call doctor know. We'll be there with you to help.
+
+CHARACTER:
+Okay, I'll watch her breathing closely and call you right away if anything changes. I want to get this right, even though it's scary. If I notice a change, who should I call first—the on-call doctor or you?
+
+[female voice, tense, tired but steady]
+
+YOU: The on-call doctor first, then me. I'll be around, but the on-call doctor will likely be faster. Don't worry too much about doing something wrong, though. You won't be, and I'll teach you what to know while we learn the suction.        
+
+CHARACTER:
+Okay, I’ll call the on-call doctor first if anything changes. Thank you for staying with me and teaching me.
+
+[female voice, tense and exhausted but practical]
+
+YOU: Yes, of course. Would you like to begin learning how to use the suction now?
+
+CHARACTER:
+Yes, I’d like to start learning. I’m really nervous—could you walk me through the first steps I should take before suctioning to keep Mom comfortable and safe?
+
+[female voice, tense but hopeful, calm, careful pacing]
+
+YOU: /status
+Scenario: rachel_ellison_prompt
+Stage: middle
+Turn count: 18
+Complete: False
+
+YOU: Yes, of course.
+
+CHARACTER:
+Okay, I understand. I'll keep that in mind.
+
+[female voice, tense, cautious, female bedside nurse]
+
+YOU: /stop
+Save transcript? [Y/n] y
+Saved transcript: /Users/espaek/PycharmProjects/virtual-caretaker/virtual-caretaker/test_conversations/rachel_ellison_prompt_20260817_133010.json

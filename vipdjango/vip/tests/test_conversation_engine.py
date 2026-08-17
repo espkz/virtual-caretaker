@@ -6,6 +6,8 @@ from pathlib import Path
 from vip.conversation_engine import (
     ConversationEngine,
     _history,
+    _conversation_memory,
+    _question_similarity,
     _voice_metadata,
     format_voice_metadata,
     split_dialogue_and_voice,
@@ -34,6 +36,13 @@ class ConversationEngineTests(unittest.TestCase):
         self.assertEqual(self.scenario.voice_style, "tense, worried, emotionally tired, direct but not hostile, natural pauses")
         self.assertEqual(self.scenario.introduction_voice_gender, "male")
         self.assertIn("friendly instructional tone", self.scenario.introduction_voice_style)
+
+    def test_global_prompt_keeps_character_identity_and_human_perspective(self):
+        global_prompt = (ROOT / "prompts" / "prompt_template.md").read_text(encoding="utf-8")
+        self.assertIn("You are ALWAYS the simulated character", global_prompt)
+        self.assertIn("You are NOT the learner, instructor, nurse", global_prompt)
+        self.assertIn("Do not optimize", global_prompt)
+        self.assertIn("Let emotion affect the wording", global_prompt)
 
     def test_voice_normalization_rejects_bare_gender(self):
         self.assertEqual(
@@ -68,7 +77,35 @@ class ConversationEngineTests(unittest.TestCase):
         self.assertIn("Never invent learner actions", prompt)
         self.assertIn("The target is an advisory pressure", prompt)
         self.assertIn("Never complete or emit the Closing merely because a number was reached", prompt)
+        self.assertIn("scenario cues are semantic signals, not a checklist", prompt)
+        self.assertIn("Questions are optional", prompt)
         self.assertNotIn("## Middle", prompt)
+
+    def test_context_includes_answered_question_memory(self):
+        engine = ConversationEngine("global prompt", "unused")
+        prompt = engine._system_prompt(
+            self.scenario.to_state(),
+            {
+                "current_stage": "middle",
+                "current_turn": 8,
+                "history": [
+                    {"role": "assistant", "content": "What exact details should I share?"},
+                    {"role": "user", "content": "Tell the doctor what has changed from baseline."},
+                ],
+            },
+        )
+        self.assertIn("The learner has already responded to these character questions", prompt)
+        self.assertIn("What exact details should I share?", prompt)
+        self.assertIn("move to a related concern or a new stage", prompt)
+
+    def test_question_similarity_recognizes_rephrasing(self):
+        self.assertGreaterEqual(
+            _question_similarity(
+                "What exact information should I give them about her breathing?",
+                "What exact details should I share on the call about her breathing?",
+            ),
+            0.50,
+        )
 
     def test_history_keeps_voice_separate_and_supports_legacy_embedded_voice(self):
         messages = [
@@ -150,10 +187,10 @@ class ConversationEngineTests(unittest.TestCase):
         })
         self.assertEqual(dialogue, "I am scared.")
         self.assertEqual(voice, "female voice, tense")
-        self.assertEqual(stage, "beginning")
+        self.assertEqual(stage, "middle")
         self.assertFalse(complete)
         self.assertFalse(interrupted)
-        self.assertFalse(debug["stage_transition_ready"])
+        self.assertTrue(debug["stage_transition_ready"])
         self.assertTrue(debug["embedded_voice_removed"])
 
     @patch("openai.OpenAI")
@@ -180,7 +217,7 @@ class ConversationEngineTests(unittest.TestCase):
         self.assertTrue(debug["completion_rejected"])
 
     @patch("openai.OpenAI")
-    def test_hard_cap_is_only_a_late_safety_fallback(self, openai_client):
+    def test_safety_cap_does_not_emit_fixed_closing(self, openai_client):
         openai_client.return_value.responses.create.return_value.output_text = (
             '{"dialogue":"I still have one more concern.","voice":"tense",'
             '"stage":"middle","stage_transition_ready":false,'
@@ -197,10 +234,10 @@ class ConversationEngineTests(unittest.TestCase):
             "current_stage": "middle",
             "phase": "closure_flexibility",
         })
-        self.assertEqual(dialogue, self.scenario.closing)
-        self.assertEqual(stage, "ending")
-        self.assertTrue(complete)
-        self.assertEqual(debug["reason"], "hard_budget_fallback")
+        self.assertEqual(dialogue, "I still have one more concern.")
+        self.assertEqual(stage, "middle")
+        self.assertFalse(complete)
+        self.assertEqual(debug["reason"], "llm_turn_at_safety_cap")
 
     def test_missing_persisted_stage_does_not_use_turn_number(self):
         engine = ConversationEngine("global prompt", "unused")
@@ -216,6 +253,32 @@ class ConversationEngineTests(unittest.TestCase):
             }
             engine.respond(self.role_text, messages)
         self.assertEqual(invoke.call_args.args[0]["current_stage"], "beginning")
+
+    @patch("openai.OpenAI")
+    def test_beginning_can_transition_to_middle_after_a_few_turns(self, openai_client):
+        openai_client.return_value.responses.create.return_value.output_text = (
+            '{"dialogue":"I understand. I am ready to talk about what comes next.","voice":"worried",'
+            '"stage":"middle","stage_transition_ready":false,'
+            '"complete":false,"stop_requested":false}'
+        )
+        engine = ConversationEngine("global prompt", "unused")
+        dialogue, _, stage, complete, _, debug = engine._llm_turn({
+            "scenario": self.scenario.to_state(),
+            "history": [
+                {"role": "assistant", "content": "I am frightened. Is she going to wake up?"},
+                {"role": "user", "content": "I understand why this is frightening. Recovery is unlikely, but we cannot claim certainty."},
+            ],
+            "current_turn": 3,
+            "target_turns": 20,
+            "max_turns": 24,
+            "turns_remaining": 21,
+            "current_stage": "beginning",
+            "phase": "normal",
+        })
+        self.assertIn("ready to talk", dialogue)
+        self.assertEqual(stage, "middle")
+        self.assertFalse(complete)
+        self.assertTrue(debug["stage_transition_ready"])
 
     @patch("openai.OpenAI")
     def test_semantic_ending_can_complete_before_soft_target(self, openai_client):
@@ -238,6 +301,65 @@ class ConversationEngineTests(unittest.TestCase):
         self.assertEqual(dialogue, self.scenario.closing)
         self.assertEqual(stage, "ending")
         self.assertTrue(complete)
+
+    @patch("openai.OpenAI")
+    def test_repeated_answered_question_gets_a_repair_turn(self, openai_client):
+        openai_client.return_value.responses.create.side_effect = [
+            type("Response", (), {"output_text": (
+                '{"dialogue":"Okay, I understand. What exact details should I give them on the call to convey urgency?",'
+                '"voice":"worried","stage":"middle","stage_transition_ready":false,'
+                '"complete":false,"stop_requested":false}'
+            )})(),
+            type("Response", (), {"output_text": (
+                '{"dialogue":"Okay, I understand. I will tell the doctor what has changed from her baseline. I am also worried about how long she may live like this.",'
+                '"voice":"worried","stage":"middle","stage_transition_ready":false,'
+                '"complete":false,"stop_requested":false}'
+            )})(),
+        ]
+        history = [
+            {"role": "assistant", "content": "What exact information should I give the on-call doctor?"},
+            {"role": "user", "content": "Tell the doctor what has changed from her baseline."},
+        ]
+        engine = ConversationEngine("global prompt", "unused")
+        dialogue, _, _, complete, _, debug = engine._llm_turn({
+            "scenario": self.scenario.to_state(),
+            "history": history,
+            "current_turn": 3,
+            "target_turns": 20,
+            "max_turns": 24,
+            "turns_remaining": 21,
+            "current_stage": "middle",
+            "phase": "normal",
+        })
+        self.assertNotIn("What exact details should I give them on the call", dialogue)
+        self.assertIn("what has changed from her baseline", dialogue)
+        self.assertFalse(complete)
+        self.assertTrue(debug["repetition_repaired"])
+        self.assertEqual(openai_client.return_value.responses.create.call_count, 2)
+        repair_prompt = openai_client.return_value.responses.create.call_args.kwargs["input"][0]["content"]
+        self.assertIn("REPAIR INSTRUCTION", repair_prompt)
+
+    @patch("openai.OpenAI")
+    def test_no_filler_question_is_added_at_soft_target(self, openai_client):
+        openai_client.return_value.responses.create.return_value.output_text = (
+            '{"dialogue":"I understand. I need a moment to take that in.","voice":"tense",'
+            '"stage":"middle","stage_transition_ready":false,'
+            '"complete":false,"stop_requested":false}'
+        )
+        engine = ConversationEngine("global prompt", "unused")
+        dialogue, _, stage, complete, _, _ = engine._llm_turn({
+            "scenario": self.scenario.to_state(),
+            "history": [{"role": "user", "content": "I have answered your concern."}],
+            "current_turn": 20,
+            "target_turns": 20,
+            "max_turns": 24,
+            "turns_remaining": 4,
+            "current_stage": "middle",
+            "phase": "closure_preference",
+        })
+        self.assertEqual(dialogue, "I understand. I need a moment to take that in.")
+        self.assertEqual(stage, "middle")
+        self.assertFalse(complete)
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ class ConversationGraphTests(unittest.TestCase):
         self.assertEqual(_phase_for_turn(TARGET_TURNS), "closure_preference")
         self.assertGreater(MAX_TURNS, TARGET_TURNS)
 
-    def test_stage_transition_requires_explicit_readiness(self):
+    def test_forward_stage_selection_is_the_semantic_transition_signal(self):
         def respond(state):
             return "response", "female voice, tense", "middle", False, False, {
                 "stage_transition_ready": False,
@@ -19,9 +19,21 @@ class ConversationGraphTests(unittest.TestCase):
 
         graph = build_conversation_graph(respond)
         result = graph.invoke({"current_turn": 5, "current_stage": "beginning", "max_turns": 22})
-        self.assertEqual(result["current_stage"], "beginning")
-        self.assertFalse(result["stage_transition_ready"])
+        self.assertEqual(result["current_stage"], "middle")
+        self.assertTrue(result["stage_transition_ready"])
         self.assertEqual(result["voice_metadata"], "female voice, tense")
+
+    def test_stage_does_not_regress_at_any_turn(self):
+        def respond(state):
+            return "response", "female voice, tense", "beginning", False, False, {
+                "stage_transition_ready": True,
+                "reason": "llm_turn",
+            }
+
+        graph = build_conversation_graph(respond)
+        result = graph.invoke({"current_turn": 22, "current_stage": "middle", "max_turns": MAX_TURNS})
+        self.assertEqual(result["current_stage"], "middle")
+        self.assertFalse(result["stage_transition_ready"])
 
     def test_stage_can_advance_early_when_cues_are_ready(self):
         def respond(state):

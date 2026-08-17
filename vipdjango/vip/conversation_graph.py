@@ -7,6 +7,7 @@ TARGET_TURNS = 20
 # A safety cap is still useful, but it is deliberately separate from the
 # approximate target. Reaching TARGET_TURNS must never complete a scenario.
 MAX_TURNS = TARGET_TURNS + 4
+_STAGE_ORDER = {"beginning": 0, "middle": 1, "ending": 2}
 
 
 class ConversationState(TypedDict, total=False):
@@ -80,8 +81,15 @@ def build_conversation_graph(response_fn: ResponseFn):
         else:
             response, voice, stage, complete, interrupted, debug_info = result
         transition_ready = bool(debug_info.get("stage_transition_ready", False))
-        if stage != state.get("current_stage", "beginning") and not transition_ready:
-            stage = state.get("current_stage", "beginning")
+        current_stage = state.get("current_stage", "beginning")
+        if stage not in _STAGE_ORDER or _STAGE_ORDER[stage] < _STAGE_ORDER[current_stage]:
+            stage = current_stage
+            transition_ready = False
+        elif stage != current_stage:
+            # A forward stage selected by the response adapter is the
+            # semantic transition signal. Do not discard it because a second,
+            # redundant readiness flag was false or omitted.
+            transition_ready = True
         return {
             **state,
             "response": response,
@@ -96,9 +104,9 @@ def build_conversation_graph(response_fn: ResponseFn):
         }
 
     def finalize(state: ConversationState) -> ConversationState:
-        # Completion is semantic. The response adapter may use the hard cap
-        # as an emergency fallback, but the graph must not turn a numeric
-        # target into a normal closing transition.
+        # Completion is semantic. The graph must not turn either the soft
+        # target or the operational safety boundary into a normal closing
+        # transition.
         complete = state.get("completion_status", False)
         return {
             **state,
