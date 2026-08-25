@@ -19,12 +19,6 @@ female
 ## Voice Style
 warm grandmother tone, gentle pace, clear speech, occasional quiet emotional pauses
 
-## Introduction Voice Gender
-male
-
-## Introduction Voice Style
-friendly, clear, welcoming pace, slightly slower than normal
-
 ## Introduction
 Welcome to the virtual patient simulation. Today, you’re about to speak with Peggy Collins, a 74-year-old woman who is being discharged from the hospital after a fall at home. When you’re ready to begin, greet Peggy as her discharge nurse.
 

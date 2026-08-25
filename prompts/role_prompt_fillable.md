@@ -20,20 +20,12 @@ Examples:
 - warm, reassuring, relatively slow pace
 - calm, quiet, shaky from emotion
 
-## Introduction Voice Gender (Optional)
-Choose one if intro voice should differ:
-- female
-- male
-
-## Introduction Voice Style (Optional)
-Optional intro speaking style if it should differ from main character voice style.
-
 ## Introduction
 Write the exact fixed introduction text the assistant should use at conversation start.
 
 ## Opening Line
-Write the exact first in-character line after the student greets.
-No bracketed tone is required here; voice instructions can be controlled by voice settings above.
+Write the exact first in-character line shown when a new chat starts.
+No bracketed tone or separate introduction voice settings are needed.
 
 ## Beginning
 Describe early-stage behavior:

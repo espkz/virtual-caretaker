@@ -76,8 +76,8 @@
                     <article class="chat-message {{ message.sender }}">
                         <div class="chat-meta">{{ message.sender_display }} | {{ message.created_at }}</div>
                         <div>{{ message.display_content|linebreaksbr }}</div>
-                        {% if message.sender == "assistant" %}
-                        <button type="button" class="tts-button" data-tts-url="{% url 'vip:student_message_tts' message.id %}">
+                        {% if message.sender == "assistant" and message.voice_enabled %}
+                        <button type="button" class="tts-button" data-message-id="{{ message.id }}" data-tts-url="{% url 'vip:student_message_tts' message.id %}">
                             Play Voice
                         </button>
                         <div class="message-audio-controls">
@@ -109,9 +109,11 @@
                 <button type="submit">Start New Conversation</button>
             </form>
             {% else %}
-            <form class="message-form" method="post">
+            <form class="message-form" method="post" action="{% url 'vip:student_dashboard' %}">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="send_message">
+                <input type="hidden" id="voice-timing" name="voice_timing" value="">
+                <input type="hidden" id="voice-turn-id" name="turn_id" value="">
                 {% if selected_prompt %}
                 <input type="hidden" name="prompt_id" value="{{ selected_prompt.id }}">
                 {% endif %}
@@ -130,6 +132,7 @@
                 </label>
                 <div class="voice-actions"></div>
                 <div id="stt-status" class="voice-status"></div>
+                <div id="streaming-voice-status" class="voice-status"></div>
                 <div class="compose-row">
                     <textarea id="student-message-input" name="message" placeholder="Type your message here..." required></textarea>
                     <button type="submit" class="send-button-inline" id="send-message-btn">Send</button>
@@ -164,18 +167,103 @@
         const sendMessageBtn = document.getElementById("send-message-btn");
         const micToggleBtn = document.getElementById("stt-toggle");
         const status = document.getElementById("stt-status");
+        const streamingStatus = document.getElementById("streaming-voice-status");
+        const voiceTimingInput = document.getElementById("voice-timing");
+        const voiceTurnInput = document.getElementById("voice-turn-id");
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const pageTrace = new URLSearchParams(window.location.search).get("trace");
+        const currentSessionId = "{% if current_session %}{{ current_session.id }}{% endif %}";
+        const voiceTiming = {
+            trace_id: pageTrace || ((window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now())),
+            events: {}
+        };
+        const firstTimingMarks = new Set([
+            "recording_start", "recording_end", "speech_end",
+            "stt_start", "stt_completion", "stt_finalization",
+            "gpt_request_start", "gpt_first_output", "tts_text_first_usable",
+            "response_display", "response_generation_complete", "response_complete",
+            "first_tts_audio_data", "tts_first_audio_chunk", "audio_playback_start",
+            "tts_request_start", "client_pipeline_complete"
+        ]);
+        function normalizeFinalTranscript(value) {
+            let text = (value || "").replace(/\s+/g, " ").trim();
+            if (!text) {
+                return "";
+            }
+            text = text.charAt(0).toUpperCase() + text.slice(1);
+            const secondQuestion = text.search(
+                /\s+(what|when|where|why|how|who)\s+(have|has|did|do|does|are|is|was|were|can|could|would|will)\b/i
+            );
+            if (/^(can|could|would|will|should|is|are|do|does|did)\b/i.test(text) && secondQuestion > 0) {
+                const first = text.slice(0, secondQuestion).replace(/[,.!?]+$/, "") + "?";
+                const second = text.slice(secondQuestion + 1);
+                text = first + " " + second.charAt(0).toUpperCase() + second.slice(1);
+            }
+            if (!/[.!?]$/.test(text)) {
+                text += /^(can|could|would|will|should|is|are|do|does|did|what|when|where|why|how|who)\b/i.test(text) ? "?" : ".";
+            }
+            return text;
+        }
+        function ensureTurnId() {
+            if (voiceTurnInput && !voiceTurnInput.value) {
+                voiceTurnInput.value = (window.crypto && crypto.randomUUID)
+                    ? crypto.randomUUID()
+                    : String(Date.now()) + "-" + Math.random().toString(16).slice(2);
+            }
+            return voiceTurnInput ? voiceTurnInput.value : "";
+        }
+        function browserEpochMs() {
+            return (performance.timeOrigin || (Date.now() - performance.now())) + performance.now();
+        }
+        function markVoiceTiming(name) {
+            if (firstTimingMarks.has(name) && voiceTiming.events[name] !== undefined) {
+                return;
+            }
+            voiceTiming.events[name] = browserEpochMs();
+        }
+        function flushVoiceTiming() {
+            if (voiceTimingInput) {
+                voiceTimingInput.value = JSON.stringify(voiceTiming);
+            }
+        }
+        function reportVoiceTiming(messageId, turnId, sessionId) {
+            const timingReport = new URLSearchParams();
+            timingReport.set("timing", JSON.stringify(voiceTiming));
+            if (sessionId || currentSessionId) {
+                timingReport.set("session_id", sessionId || currentSessionId);
+            }
+            if (messageId) {
+                timingReport.set("message_id", messageId);
+            }
+            if (turnId) {
+                timingReport.set("turn_id", turnId);
+            }
+            fetch(voiceTimingUrl, {
+                method: "POST",
+                headers: {"X-CSRFToken": csrfToken()},
+                body: timingReport,
+                keepalive: true
+            }).catch(function () {});
+        }
+        if (pageTrace) {
+            markVoiceTiming("response_display");
+        }
 
+        let recognition = null;
+        let isListening = false;
+        let shouldAutoSubmit = false;
         if (SpeechRecognition && textarea && micToggleBtn && status && messageForm && sendMessageBtn) {
-            const recognition = new SpeechRecognition();
+            recognition = new SpeechRecognition();
             recognition.lang = "en-US";
             recognition.interimResults = true;
             recognition.continuous = true;
 
             let committedTranscript = "";
-            let isListening = false;
-            let shouldAutoSubmit = false;
+            isListening = false;
+            shouldAutoSubmit = false;
             recognition.onstart = function () {
+                markVoiceTiming("recording_start");
+                markVoiceTiming("stt_start");
                 committedTranscript = textarea.value ? textarea.value.trim() : "";
                 if (committedTranscript) {
                     committedTranscript += " ";
@@ -201,6 +289,12 @@
                 status.textContent = "Speech error: " + event.error;
             };
             recognition.onend = function () {
+                markVoiceTiming("recording_end");
+                // SpeechRecognition has delivered its final result by
+                // onend; this is the complete-transcript boundary used for
+                // the end-of-speech latency measurement.
+                markVoiceTiming("stt_completion");
+                markVoiceTiming("stt_finalization");
                 if (status.textContent === "Listening...") {
                     status.textContent = "Microphone stopped.";
                 }
@@ -209,6 +303,7 @@
                 micToggleBtn.textContent = "🎤";
                 if (shouldAutoSubmit) {
                     shouldAutoSubmit = false;
+                    textarea.value = normalizeFinalTranscript(committedTranscript || textarea.value);
                     if (textarea.value.trim()) {
                         messageForm.requestSubmit(sendMessageBtn);
                     }
@@ -222,9 +317,15 @@
                     return;
                 }
                 shouldAutoSubmit = true;
+                markVoiceTiming("speech_end");
                 recognition.stop();
             });
 
+        } else if (status) {
+            status.textContent = "Speech-to-text is not supported in this browser.";
+        }
+
+        if (textarea && messageForm && sendMessageBtn) {
             textarea.addEventListener("keydown", function (event) {
                 if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
@@ -240,10 +341,19 @@
                 if (actionValue !== "send_message") {
                     return;
                 }
+                if (isListening && recognition) {
+                    event.preventDefault();
+                    shouldAutoSubmit = true;
+                    markVoiceTiming("speech_end");
+                    recognition.stop();
+                    return;
+                }
                 if (!textarea.value.trim()) {
                     event.preventDefault();
                     return;
                 }
+                ensureTurnId();
+                flushVoiceTiming();
                 if (messageForm.dataset.sending === "1") {
                     event.preventDefault();
                     return;
@@ -257,9 +367,14 @@
                 if (micToggleBtn) {
                     micToggleBtn.disabled = true;
                 }
+                // Typed and microphone turns use the same incremental server
+                // response, so both can begin audio as soon as a sentence is
+                // available.  The ordinary POST remains the browser fallback.
+                if (window.ReadableStream) {
+                    event.preventDefault();
+                    streamVoiceConversation();
+                }
             });
-        } else if (status) {
-            status.textContent = "Speech-to-text is not supported in this browser.";
         }
 
         const emotionToggle = document.getElementById("emotion-voice-toggle");
@@ -272,12 +387,290 @@
                 localStorage.setItem("emotion_voice_enabled", emotionToggle.checked ? "1" : "0");
             });
         }
+        const streamTTSUrl = "{% url 'vip:student_stream_tts' %}";
+        const voiceTimingUrl = "{% url 'vip:student_voice_timing' %}";
+        let voiceAudioQueue = Promise.resolve();
+        let activeStreamAudio = null;
+        let activeStreamAudioCancel = null;
+        let streamAudioGeneration = 0;
+        let streamController = null;
+        let activeStreamTurnId = "";
+        let lastStreamEventSequence = 0;
+        let streamSpeechIndexes = new Set();
+        let streamCompletionHandled = false;
+        let streamingCard = null;
+        let streamingText = "";
+
+        function cancelQueuedStreamAudio() {
+            streamAudioGeneration += 1;
+            if (activeStreamAudioCancel) {
+                activeStreamAudioCancel();
+                activeStreamAudioCancel = null;
+            }
+            if (activeStreamAudio) {
+                activeStreamAudio.pause();
+                activeStreamAudio.removeAttribute("src");
+                activeStreamAudio.load();
+                activeStreamAudio = null;
+            }
+            voiceAudioQueue = Promise.resolve();
+        }
+
+        function csrfToken() {
+            const cookie = document.cookie.split(";").map(function (part) { return part.trim(); })
+                .find(function (part) { return part.indexOf("csrftoken=") === 0; });
+            return cookie ? decodeURIComponent(cookie.substring("csrftoken=".length)) : "";
+        }
+
+        function ensureStreamingCard() {
+            if (streamingCard || !chatWindow) {
+                return streamingCard;
+            }
+            streamingCard = document.createElement("article");
+            streamingCard.className = "chat-message assistant";
+            const meta = document.createElement("div");
+            meta.className = "chat-meta";
+            meta.textContent = "AI | responding...";
+            const content = document.createElement("div");
+            content.className = "streaming-assistant-text";
+            streamingCard.appendChild(meta);
+            streamingCard.appendChild(content);
+            chatWindow.appendChild(streamingCard);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+            return streamingCard;
+        }
+
+        function updateStreamingText(text, replace) {
+            const card = ensureStreamingCard();
+            if (!card) {
+                return;
+            }
+            streamingText = replace ? (text || "") : streamingText + (text || "");
+            card.querySelector(".streaming-assistant-text").textContent = streamingText;
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+            markVoiceTiming("response_display");
+        }
+
+        function queueSpeechChunk(text, metadata, traceId, index, messageId, turnId, sessionId) {
+            if (!text) {
+                return;
+            }
+            const numericIndex = Number(index);
+            if (Number.isInteger(numericIndex) && numericIndex > 0) {
+                if (streamSpeechIndexes.has(numericIndex)) {
+                    return;
+                }
+                streamSpeechIndexes.add(numericIndex);
+            }
+            const generation = streamAudioGeneration;
+            markVoiceTiming("tts_text_first_usable");
+            voiceAudioQueue = voiceAudioQueue.then(async function () {
+                if (generation !== streamAudioGeneration) {
+                    return;
+                }
+                if (streamingStatus) {
+                    streamingStatus.textContent = "Generating voice...";
+                }
+                markVoiceTiming("tts_request_start");
+                const audioParams = new URLSearchParams();
+                audioParams.set("text", text);
+                audioParams.set("voice_metadata", metadata || "Speak naturally and clearly.");
+                audioParams.set("trace_id", traceId || voiceTiming.trace_id);
+                audioParams.set("emotion", emotionToggle && emotionToggle.checked ? "1" : "0");
+                if (sessionId || currentSessionId) {
+                    audioParams.set("session_id", sessionId || currentSessionId);
+                }
+                if (messageId) {
+                    audioParams.set("message_id", messageId);
+                }
+                if (turnId) {
+                    audioParams.set("turn_id", turnId);
+                }
+                const audio = new Audio(streamTTSUrl + "?" + audioParams.toString());
+                activeStreamAudio = audio;
+                let cancelled = false;
+                let resolvePlayback;
+                const playbackDone = new Promise(function (resolve) {
+                    resolvePlayback = resolve;
+                });
+                const cancelPlayback = function () {
+                    cancelled = true;
+                    resolvePlayback();
+                };
+                activeStreamAudioCancel = cancelPlayback;
+                audio.addEventListener("canplay", function () {
+                    markVoiceTiming("first_tts_audio_data");
+                    markVoiceTiming("tts_first_audio_chunk");
+                }, {once: true});
+                audio.addEventListener("playing", function () {
+                    markVoiceTiming("audio_playback_start");
+                    if (streamingStatus) {
+                        streamingStatus.textContent = "Voice playing...";
+                    }
+                }, {once: true});
+                audio.addEventListener("ended", resolvePlayback, {once: true});
+                audio.addEventListener("error", resolvePlayback, {once: true});
+                audio.addEventListener("abort", resolvePlayback, {once: true});
+                try {
+                    await audio.play();
+                    await playbackDone;
+                } catch (error) {
+                    if (!cancelled && streamingStatus) {
+                        streamingStatus.textContent = "Voice autoplay was blocked; use the message Play Voice button.";
+                    }
+                } finally {
+                    if (activeStreamAudio === audio) {
+                        activeStreamAudio = null;
+                        activeStreamAudioCancel = null;
+                    }
+                }
+            }).catch(function (error) {
+                if (streamingStatus) {
+                    streamingStatus.textContent = error.message || "Streamed voice failed.";
+                }
+            });
+        }
+
+        function handleVoiceStreamEvent(data) {
+            if (!data || !data.event) {
+                return;
+            }
+            if (data.turn_id && activeStreamTurnId && data.turn_id !== activeStreamTurnId) {
+                return;
+            }
+            if (data.event_sequence && data.event_sequence <= lastStreamEventSequence) {
+                return;
+            }
+            if (data.event_sequence) {
+                lastStreamEventSequence = data.event_sequence;
+            }
+            if (data.event === "assistant_delta") {
+                updateStreamingText(data.text, false);
+            } else if (data.event === "assistant_final") {
+                updateStreamingText(data.text, true);
+            } else if (data.event === "assistant_reset") {
+                cancelQueuedStreamAudio();
+                streamSpeechIndexes.clear();
+                updateStreamingText("", true);
+            } else if (data.event === "speech_chunk") {
+                queueSpeechChunk(
+                    data.text,
+                    data.voice_metadata,
+                    data.trace_id,
+                    data.index,
+                    data.message_id,
+                    data.turn_id || activeStreamTurnId,
+                    data.session_id
+                );
+            } else if (data.event === "stream_started") {
+                if (streamingStatus) {
+                    streamingStatus.textContent = "Assistant is responding...";
+                }
+            } else if (data.event === "complete") {
+                if (streamCompletionHandled) {
+                    return;
+                }
+                streamCompletionHandled = true;
+                markVoiceTiming("response_complete");
+                if (streamingStatus) {
+                    streamingStatus.textContent = "Response complete.";
+                }
+                if (data.timings && data.timings.server_events) {
+                    voiceTiming.server_events = data.timings.server_events;
+                }
+                console.info("voice_pipeline", data.timings);
+                voiceAudioQueue.then(function () {
+                    markVoiceTiming("client_pipeline_complete");
+                    reportVoiceTiming(data.message_id, data.turn_id || activeStreamTurnId, data.session_id);
+                    if (data.redirect_url) {
+                        window.location.assign(data.redirect_url);
+                    }
+                });
+            } else if (data.event === "error") {
+                throw new Error(data.message || "Assistant response failed.");
+            }
+        }
+
+        async function streamVoiceConversation() {
+            flushVoiceTiming();
+            if (streamController) {
+                streamController.abort();
+            }
+            activeStreamTurnId = ensureTurnId();
+            lastStreamEventSequence = 0;
+            streamSpeechIndexes.clear();
+            streamCompletionHandled = false;
+            cancelQueuedStreamAudio();
+            const requestController = new AbortController();
+            streamController = requestController;
+            try {
+                const response = await fetch(messageForm.getAttribute("action") || window.location.href, {
+                    method: "POST",
+                    headers: {"Accept": "text/event-stream", "X-Requested-With": "fetch"},
+                    body: new FormData(messageForm),
+                    signal: requestController.signal
+                });
+                if (!response.ok || !response.body) {
+                    throw new Error("Voice response streaming is unavailable.");
+                }
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let pending = "";
+                function consume(chunk) {
+                    pending += chunk;
+                    const blocks = pending.split("\n\n");
+                    pending = blocks.pop() || "";
+                    blocks.forEach(function (block) {
+                        const line = block.split("\n").find(function (item) { return item.indexOf("data: ") === 0; });
+                        if (line) {
+                            handleVoiceStreamEvent(JSON.parse(line.substring(6)));
+                        }
+                    });
+                }
+                while (true) {
+                    const part = await reader.read();
+                    consume(decoder.decode(part.value || new Uint8Array(), {stream: !part.done}));
+                    if (part.done) {
+                        break;
+                    }
+                }
+                if (pending.trim()) {
+                    const line = pending.split("\n").find(function (item) { return item.indexOf("data: ") === 0; });
+                    if (line) {
+                        handleVoiceStreamEvent(JSON.parse(line.substring(6)));
+                    }
+                }
+            } catch (error) {
+                if (streamController !== requestController) {
+                    return;
+                }
+                if (error.name !== "AbortError" && streamingStatus) {
+                    streamingStatus.textContent = error.message || "Voice response failed.";
+                }
+                messageForm.dataset.sending = "";
+                if (micToggleBtn) {
+                    micToggleBtn.disabled = false;
+                }
+            } finally {
+                if (streamController === requestController) {
+                    streamController = null;
+                }
+            }
+        }
+
         const ttsButtons = document.querySelectorAll(".tts-button");
+        const audioRequests = new WeakMap();
         function stopAllOtherAudio(exceptAudio) {
             document.querySelectorAll(".message-audio-controls audio").forEach(function (audio) {
                 if (audio !== exceptAudio) {
+                    const state = audioRequests.get(audio);
+                    if (state && state.controller) {
+                        state.controller.abort();
+                    }
                     audio.pause();
                     audio.currentTime = 0;
+                    audio.removeAttribute("src");
+                    audio.load();
                 }
             });
         }
@@ -294,23 +687,47 @@
                 return;
             }
 
+            if (streamController) {
+                streamController.abort();
+                activeStreamTurnId = "";
+                streamCompletionHandled = true;
+            }
+            cancelQueuedStreamAudio();
+            const previousRequest = audioRequests.get(audioPlayer);
+            if (previousRequest && previousRequest.controller) {
+                previousRequest.controller.abort();
+            }
+            const requestState = {
+                generation: (previousRequest ? previousRequest.generation : 0) + 1,
+                controller: new AbortController(),
+            };
+            audioRequests.set(audioPlayer, requestState);
             try {
                 if (audioStatus) {
                     audioStatus.textContent = "Generating voice...";
                 }
-                const response = await fetch(url + "?emotion=" + emotionFlag);
-                if (!response.ok) {
-                    throw new Error("Could not load voice audio.");
+                markVoiceTiming("tts_text_first_usable");
+                markVoiceTiming("tts_request_start");
+                const streamUrl = url + "?emotion=" + emotionFlag + "&trace=" + encodeURIComponent(voiceTiming.trace_id);
+                if (audioRequests.get(audioPlayer) !== requestState) {
+                    return;
                 }
-                const blob = await response.blob();
-                const objectUrl = URL.createObjectURL(blob);
                 stopAllOtherAudio(audioPlayer);
-                audioPlayer.src = objectUrl;
+                audioPlayer.pause();
+                audioPlayer.currentTime = 0;
+                audioPlayer.src = streamUrl;
                 if (audioStatus) {
                     audioStatus.textContent = "Voice ready. Playing...";
                 }
+                audioPlayer.addEventListener("playing", function () {
+                    markVoiceTiming("audio_playback_start");
+                    reportVoiceTiming(btn.dataset.messageId, "");
+                }, {once: true});
                 await audioPlayer.play();
             } catch (err) {
+                if (audioRequests.get(audioPlayer) !== requestState) {
+                    return;
+                }
                 if (audioStatus) {
                     if (isAutoplay) {
                         audioStatus.textContent = "Autoplay blocked or delayed. Press Play on the audio bar.";
@@ -319,6 +736,10 @@
                     }
                 } else {
                     alert(err.message || "TTS failed.");
+                }
+            } finally {
+                if (audioRequests.get(audioPlayer) === requestState) {
+                    requestState.controller = null;
                 }
             }
         }
@@ -350,8 +771,15 @@
 
             if (stopBtn) {
                 stopBtn.addEventListener("click", function () {
+                    const state = audioRequests.get(audio);
+                    if (state && state.controller) {
+                        state.controller.abort();
+                    }
+                    audioRequests.delete(audio);
                     audio.pause();
                     audio.currentTime = 0;
+                    audio.removeAttribute("src");
+                    audio.load();
                     if (statusText) {
                         statusText.textContent = "Stopped.";
                     }

@@ -9,8 +9,6 @@ class Scenario:
     learner: str
     voice_gender: str
     voice_style: str
-    introduction_voice_gender: str
-    introduction_voice_style: str
     introduction: str
     opening_line: str
     beginning: str
@@ -25,10 +23,8 @@ class Scenario:
     def to_state(self):
         return asdict(self)
 
-    def voice_metadata(self, introduction=False):
-        gender = self.introduction_voice_gender if introduction else self.voice_gender
-        style = self.introduction_voice_style if introduction else self.voice_style
-        return f"{gender} voice, {style}"
+    def voice_metadata(self):
+        return f"{self.voice_gender} voice, {self.voice_style}"
 
 
 def parse_scenario_prompt(role_text: str) -> Scenario:
@@ -41,17 +37,11 @@ def parse_scenario_prompt(role_text: str) -> Scenario:
     if gender not in {"male", "female"}:
         gender = "female"
     voice_style = section(["voice style", "voice instructions"]) or "speak naturally and clearly"
-    introduction_gender = (section(["introduction voice gender", "intro voice gender"]) or gender).lower()
-    if introduction_gender not in {"male", "female"}:
-        introduction_gender = gender
-    introduction_style = section(["introduction voice style", "intro voice style"]) or voice_style
     return Scenario(
         character=section(["role", "role summary", "character"]) or role_text.strip(),
         learner=section(["learner role", "user role"]) or "nursing student",
         voice_gender=gender,
         voice_style=voice_style,
-        introduction_voice_gender=introduction_gender,
-        introduction_voice_style=introduction_style,
         introduction=section(["introduction", "introduction: greeting"]),
         opening_line=section(["opening line"]),
         beginning=section(["beginning", "conversation progression: beginning"]),

@@ -30,6 +30,10 @@ class ConversationState(TypedDict, total=False):
     interrupt_requested: bool
     introduction_emitted: bool
     protocol_emitted: bool
+    # Runtime-only hooks used by the optional voice streaming adapter. They
+    # are deliberately not persisted as conversation state.
+    stream_callback: Callable[[dict[str, Any]], None]
+    timing_callback: Callable[[str], None]
     debug_info: dict[str, Any]
 
 

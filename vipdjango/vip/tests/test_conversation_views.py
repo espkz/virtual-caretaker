@@ -1,6 +1,7 @@
 import os
+import json
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "vipson_manager.settings")
 
@@ -14,11 +15,22 @@ from django.urls import reverse
 
 from vip.models import ChatMessage, ChatSession, RolePrompt
 from vip.views import (
+    DEFAULT_INTRODUCTION,
     _conversation_messages,
+    _accept_learner_turn,
+    _merge_pipeline_timing,
+    _release_learner_turn,
+    _persist_assistant_response,
     _rendered_chat_messages,
+    _stream_chat_response,
+    _take_completed_speech_chunks,
     split_dialogue_and_voice,
+    student_download_session,
+    student_stream_tts,
     student_message_tts,
+    student_voice_timing,
 )
+from vip.voice_timing import VoicePipelineTiming
 
 
 class RelatedMessages:
@@ -75,7 +87,9 @@ class ConversationViewTests(TestCase):
         rendered = _rendered_chat_messages(session, "Student")
         self.assertEqual(len(rendered), 2)
         self.assertEqual(rendered[0]["display_content"], "I am scared.")
+        self.assertTrue(rendered[0]["voice_enabled"])
         self.assertEqual(rendered[1]["display_content"], "I said [this] to Rachel.")
+        self.assertFalse(rendered[1]["voice_enabled"])
 
         history = _conversation_messages([assistant, learner])
         self.assertEqual(history[0], {"role": "assistant", "content": "I am scared."})
@@ -120,6 +134,255 @@ class ConversationViewTests(TestCase):
         self.assertEqual(rendered_response.status_code, 200)
         self.assertEqual(rendered_response.content.decode().count("Thank you."), 1)
 
+    @patch("vip.views._generate_assistant_response")
+    def test_retried_turn_id_does_not_generate_or_persist_a_second_response(self, generate):
+        generate.return_value = (
+            "I am listening.",
+            False,
+            {"current_stage": "middle", "phase": "normal", "voice_metadata": "female voice, calm"},
+        )
+        self.client.force_login(self.professor)
+        payload = {
+            "action": "send_message",
+            "prompt_id": self.prompt.id,
+            "message": "Please tell me more.",
+            "turn_id": "retryable-turn-1",
+        }
+
+        first = self.client.post(reverse("vip:professor_test_chat"), payload)
+        second = self.client.post(reverse("vip:professor_test_chat"), payload)
+
+        self.assertEqual(first.status_code, 302)
+        self.assertEqual(second.status_code, 302)
+        session = ChatSession.objects.get(student=self.professor, role_prompt=self.prompt)
+        self.assertEqual(session.messages.filter(sender=ChatMessage.Sender.STUDENT).count(), 1)
+        self.assertEqual(session.messages.filter(sender=ChatMessage.Sender.ASSISTANT).count(), 2)
+        self.assertEqual(generate.call_count, 1)
+
+    def test_session_accepts_one_pending_turn_and_stale_commit_is_rejected(self):
+        session = ChatSession.objects.create(student=self.professor, role_prompt=self.prompt)
+        first_session, first_status, _ = _accept_learner_turn(session, "First.", "turn-1")
+        self.assertEqual(first_status, "accepted")
+
+        _, pending_status, _ = _accept_learner_turn(first_session, "Second.", "turn-2")
+        self.assertEqual(pending_status, "pending")
+
+        debug = {"current_stage": "middle", "phase": "normal", "voice_metadata": "female voice, calm"}
+        self.assertTrue(_persist_assistant_response(first_session, "First response.", False, debug, "turn-1"))
+        self.assertFalse(_persist_assistant_response(first_session, "Stale response.", False, debug, "turn-1"))
+        self.assertEqual(
+            ChatMessage.objects.filter(session=first_session, sender=ChatMessage.Sender.ASSISTANT).count(),
+            1,
+        )
+
+    def test_failed_turn_can_be_retried_without_duplicate_learner_message(self):
+        session = ChatSession.objects.create(student=self.professor, role_prompt=self.prompt)
+        session, status, _ = _accept_learner_turn(session, "Try again.", "retry-turn")
+        self.assertEqual(status, "accepted")
+        self.assertTrue(_release_learner_turn(session, "retry-turn"))
+
+        session, status, _ = _accept_learner_turn(session, "Try again.", "retry-turn")
+        self.assertEqual(status, "accepted")
+        self.assertEqual(
+            ChatMessage.objects.filter(session=session, sender=ChatMessage.Sender.STUDENT).count(),
+            1,
+        )
+
+        debug = {"current_stage": "middle", "phase": "normal", "voice_metadata": "female voice, calm"}
+        self.assertTrue(_persist_assistant_response(session, "Recovered.", False, debug, "retry-turn"))
+        session.refresh_from_db()
+        self.assertEqual(session.active_turn_id, "")
+        self.assertEqual(session.last_completed_turn_id, "retry-turn")
+
+    def test_late_cleanup_cannot_release_a_replacement_claim(self):
+        session = ChatSession.objects.create(student=self.professor, role_prompt=self.prompt)
+        session, status, _ = _accept_learner_turn(session, "Retry claim.", "claim-turn")
+        self.assertEqual(status, "accepted")
+        first_claim = session.active_claim_id
+        self.assertTrue(_release_learner_turn(session, "claim-turn", first_claim))
+
+        session, status, _ = _accept_learner_turn(session, "Retry claim.", "claim-turn")
+        self.assertEqual(status, "accepted")
+        second_claim = session.active_claim_id
+        self.assertNotEqual(first_claim, second_claim)
+        self.assertFalse(_release_learner_turn(session, "claim-turn", first_claim))
+        session.refresh_from_db()
+        self.assertEqual(session.active_claim_id, second_claim)
+
+    def test_stale_claim_cannot_commit_after_a_retry_reclaims_the_turn(self):
+        session = ChatSession.objects.create(student=self.professor, role_prompt=self.prompt)
+        session, status, _ = _accept_learner_turn(session, "Retry response.", "stale-turn")
+        self.assertEqual(status, "accepted")
+        first_claim = session.active_claim_id
+        self.assertTrue(_release_learner_turn(session, "stale-turn", first_claim))
+        session, status, _ = _accept_learner_turn(session, "Retry response.", "stale-turn")
+        self.assertEqual(status, "accepted")
+        second_claim = session.active_claim_id
+
+        debug = {"current_stage": "middle", "phase": "normal", "voice_metadata": "female voice, calm"}
+        self.assertFalse(
+            _persist_assistant_response(
+                session,
+                "Stale response.",
+                False,
+                debug,
+                turn_id="stale-turn",
+                claim_id=first_claim,
+            )
+        )
+        self.assertEqual(
+            ChatMessage.objects.filter(session=session, sender=ChatMessage.Sender.ASSISTANT).count(),
+            0,
+        )
+        self.assertTrue(
+            _persist_assistant_response(
+                session,
+                "Current response.",
+                False,
+                debug,
+                turn_id="stale-turn",
+                claim_id=second_claim,
+            )
+        )
+
+    def test_cancelled_response_cannot_be_persisted(self):
+        session = ChatSession.objects.create(student=self.professor, role_prompt=self.prompt)
+        session, status, _ = _accept_learner_turn(session, "Cancel this response.", "cancelled-turn")
+        self.assertEqual(status, "accepted")
+        claim_id = session.active_claim_id
+
+        self.assertFalse(
+            _persist_assistant_response(
+                session,
+                "This must not be saved.",
+                False,
+                {"current_stage": "middle", "phase": "normal", "voice_metadata": ""},
+                turn_id="cancelled-turn",
+                cancellation_callback=lambda: True,
+                claim_id=claim_id,
+            )
+        )
+        self.assertFalse(
+            ChatMessage.objects.filter(
+                session=session,
+                sender=ChatMessage.Sender.ASSISTANT,
+                turn_id="cancelled-turn",
+            ).exists()
+        )
+        self.assertTrue(_release_learner_turn(session, "cancelled-turn", claim_id))
+
+    def test_reused_turn_id_with_different_content_is_rejected(self):
+        session = ChatSession.objects.create(student=self.professor, role_prompt=self.prompt)
+        _accept_learner_turn(session, "Original content.", "fixed-turn")
+        self.assertEqual(
+            _accept_learner_turn(session, "Changed content.", "fixed-turn")[1],
+            "conflict",
+        )
+
+    def test_empty_completed_turn_is_idempotent(self):
+        session = ChatSession.objects.create(student=self.professor, role_prompt=self.prompt)
+        session, status, _ = _accept_learner_turn(session, "Stop now.", "stop-turn")
+        self.assertEqual(status, "accepted")
+        debug = {"current_stage": "ending", "phase": "normal", "voice_metadata": ""}
+        self.assertTrue(_persist_assistant_response(session, "", True, debug, "stop-turn"))
+        session.refresh_from_db()
+
+        session, status, assistant = _accept_learner_turn(session, "Stop now.", "stop-turn")
+        self.assertEqual(status, "duplicate")
+        self.assertIsNone(assistant)
+
+    @patch("vip.views._generate_assistant_response", side_effect=RuntimeError("generation failed"))
+    def test_generation_error_releases_pending_turn(self, _generate):
+        self.client.force_login(self.professor)
+        with self.assertRaises(RuntimeError):
+            self.client.post(
+                reverse("vip:professor_test_chat"),
+                {
+                    "action": "send_message",
+                    "prompt_id": self.prompt.id,
+                    "message": "This should be retryable.",
+                    "turn_id": "error-turn",
+                },
+            )
+
+        session = ChatSession.objects.get(student=self.professor, role_prompt=self.prompt)
+        self.assertEqual(session.active_turn_id, "")
+
+    def test_closing_stream_releases_turn_before_worker_can_commit(self):
+        session = ChatSession.objects.create(student=self.professor, role_prompt=self.prompt)
+        session, status, _ = _accept_learner_turn(session, "Disconnect me.", "cancel-turn")
+        self.assertEqual(status, "accepted")
+        request = RequestFactory().post(
+            "/professor/test-chat/",
+            {"voice_timing": json.dumps({"trace_id": "cancel-trace", "events": {}})},
+            HTTP_ACCEPT="text/event-stream",
+        )
+        response_generator = _stream_chat_response(
+            request,
+            self.prompt.content,
+            session,
+            self.prompt,
+            "vip:professor_test_chat",
+            "Professor",
+            turn_id="cancel-turn",
+        )
+        next(response_generator)
+        response_generator.close()
+
+        session.refresh_from_db()
+        self.assertEqual(session.active_turn_id, "")
+
+    @patch("vip.views._generate_assistant_response")
+    def test_new_chat_persists_and_displays_text_only_introduction_before_first_learner_message(self, generate):
+        self.client.force_login(self.professor)
+        response = self.client.post(
+            reverse("vip:professor_test_chat"),
+            {"action": "new_session", "prompt_id": self.prompt.id},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("session=", response.url)
+        self.assertFalse(generate.called)
+        session = ChatSession.objects.get(student=self.professor, role_prompt=self.prompt)
+        messages = list(session.messages.order_by("created_at"))
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].sender, ChatMessage.Sender.ASSISTANT)
+        self.assertEqual(messages[0].content, "Welcome.")
+        self.assertEqual(messages[0].voice_metadata, "")
+
+        page = self.client.get(response.url)
+        self.assertEqual(page.status_code, 200)
+        html = page.content.decode()
+        self.assertEqual(html.count("Welcome."), 1)
+        self.assertEqual(html.count('class="tts-button"'), 0)
+
+    def test_new_chat_seeds_fallback_when_prompt_has_no_introduction(self):
+        prompt = RolePrompt.objects.create(
+            title="No Introduction",
+            content=self.prompt.content.replace("## Introduction\nWelcome.\n", "## Introduction\n\n"),
+            created_by=self.professor,
+            is_active=True,
+        )
+        self.client.force_login(self.professor)
+
+        response = self.client.post(
+            reverse("vip:professor_test_chat"),
+            {"action": "new_session", "prompt_id": prompt.id},
+        )
+
+        session = ChatSession.objects.get(student=self.professor, role_prompt=prompt)
+        self.assertEqual(session.messages.first().content, DEFAULT_INTRODUCTION)
+        self.assertNotEqual(session.messages.first().content, "I am worried.")
+        self.assertEqual(response.status_code, 302)
+
+    def test_chat_stream_form_uses_explicit_action_url_without_property_shadowing(self):
+        self.client.force_login(self.professor)
+        response = self.client.get(reverse("vip:professor_test_chat"))
+        html = response.content.decode()
+        self.assertIn('class="message-form" method="post" action="/professor/test-chat/"', html)
+        self.assertIn('messageForm.getAttribute("action") || window.location.href', html)
+        self.assertNotIn('messageForm.action || window.location.href', html)
+
     @patch("openai.OpenAI")
     @patch("vip.views._load_api_key_from_txt", return_value="test-key")
     def test_tts_receives_dialogue_and_metadata_as_separate_values(self, _api_key, openai_client):
@@ -140,3 +403,318 @@ class ConversationViewTests(TestCase):
         kwargs = openai_client.return_value.audio.speech.create.call_args.kwargs
         self.assertEqual(kwargs["input"], "I am scared.")
         self.assertEqual(kwargs["instructions"], "female voice, tense")
+        self.assertEqual(b"".join(response.streaming_content), b"audio")
+
+    @patch("vip.views._load_api_key_from_txt", return_value="test-key")
+    @patch("openai.OpenAI")
+    def test_text_only_introduction_does_not_generate_audio(self, openai_client, _api_key):
+        session = ChatSession.objects.create(student=self.professor, role_prompt=self.prompt)
+        message = ChatMessage.objects.create(
+            session=session,
+            sender=ChatMessage.Sender.ASSISTANT,
+            content="Welcome.",
+        )
+        request = RequestFactory().get("/student/messages/1/tts/")
+        request.user = self.professor
+
+        response = student_message_tts(request, message.id)
+
+        self.assertEqual(response.status_code, 400)
+        openai_client.assert_not_called()
+
+    def test_download_includes_stored_and_legacy_voice_metadata(self):
+        session = ChatSession.objects.create(student=self.professor, role_prompt=self.prompt)
+        ChatMessage.objects.create(
+            session=session,
+            sender=ChatMessage.Sender.ASSISTANT,
+            content="I am scared.",
+            voice_metadata="female voice, tense, anxious",
+        )
+        ChatMessage.objects.create(
+            session=session,
+            sender=ChatMessage.Sender.ASSISTANT,
+            content="I need a moment. [female voice, tired]",
+        )
+        request = RequestFactory().get(reverse("vip:student_download_session", args=[session.id]))
+        request.user = self.professor
+
+        response = student_download_session(request, session.id)
+
+        self.assertEqual(response.status_code, 200)
+        log = response.content.decode()
+        self.assertIn("Assistant: I am scared.", log)
+        self.assertIn("Voice metadata: female voice, tense, anxious", log)
+        self.assertIn("Assistant: I need a moment.", log)
+        self.assertIn("Voice metadata: female voice, tired", log)
+
+    def test_download_includes_persisted_pipeline_timestamps(self):
+        session = ChatSession.objects.create(student=self.professor, role_prompt=self.prompt)
+        ChatMessage.objects.create(
+            session=session,
+            sender=ChatMessage.Sender.ASSISTANT,
+            content="I am listening.",
+            voice_metadata="female voice, calm",
+            pipeline_timing={
+                "trace_id": "download-trace",
+                "client_events": {"stt_start": 1000.0},
+                "server_events": {"gpt_request_start": {"epoch_ms": 1100.0}},
+                "durations_ms": {"stt_completion_to_gpt_request_start": 100.0},
+            },
+        )
+        request = RequestFactory().get(reverse("vip:student_download_session", args=[session.id]))
+        request.user = self.professor
+
+        response = student_download_session(request, session.id)
+
+        log = response.content.decode()
+        self.assertIn("Voice pipeline timing:", log)
+        self.assertIn("download-trace", log)
+        self.assertIn("stt_start", log)
+        self.assertIn("gpt_request_start", log)
+        self.assertIn("stt_completion_to_gpt_request_start", log)
+
+    def test_voice_timing_report_is_saved_to_the_assistant_message(self):
+        session = ChatSession.objects.create(student=self.professor, role_prompt=self.prompt)
+        message = ChatMessage.objects.create(
+            session=session,
+            sender=ChatMessage.Sender.ASSISTANT,
+            content="I am listening.",
+            turn_id="timed-turn",
+            pipeline_timing={
+                "trace_id": "timed-turn-trace",
+                "server_events": {"gpt_request_start": {"epoch_ms": 1000.0}},
+            },
+        )
+        request = RequestFactory().post(
+            reverse("vip:student_voice_timing"),
+            {
+                "message_id": message.id,
+                "timing": json.dumps(
+                    {
+                        "trace_id": "timed-turn-trace",
+                        "events": {"audio_playback_start": 1200.0},
+                    }
+                ),
+            },
+        )
+        request.user = self.professor
+
+        response = student_voice_timing(request)
+
+        self.assertEqual(response.status_code, 200)
+        message.refresh_from_db()
+        self.assertIn("gpt_request_start", message.pipeline_timing["server_events"])
+        self.assertEqual(message.pipeline_timing["client_events"]["audio_playback_start"], 1200.0)
+        self.assertIn("client_report_received", message.pipeline_timing["server_events"])
+
+    def test_typed_turn_uses_streaming_response_without_voice_timing_payload(self):
+        self.client.force_login(self.professor)
+        with patch("vip.views._generate_assistant_response") as generate:
+            generate.return_value = (
+                "A typed response.",
+                False,
+                {"current_stage": "middle", "phase": "normal", "voice_metadata": "female voice, calm"},
+            )
+            response = self.client.post(
+                reverse("vip:professor_test_chat"),
+                {"action": "send_message", "prompt_id": self.prompt.id, "message": "Typed input."},
+                HTTP_ACCEPT="text/event-stream",
+            )
+            stream = b"".join(response.streaming_content).decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("event: speech_chunk", stream)
+        self.assertIn("A typed response.", stream)
+
+    @patch("gtts.gTTS")
+    @patch("vip.views._load_api_key_from_txt", return_value="test-key")
+    def test_no_emotion_tts_is_streaming(self, _api_key, gtts_client):
+        gtts_client.return_value.write_to_fp.side_effect = lambda fp: fp.write(b"plain-audio")
+        request = RequestFactory().get(
+            "/student/stream-tts/",
+            {"text": "A calm sentence.", "emotion": "0", "trace_id": "plain-trace"},
+        )
+        request.user = self.professor
+
+        response = student_stream_tts(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(hasattr(response, "streaming_content"))
+        self.assertEqual(b"".join(response.streaming_content), b"plain-audio")
+
+    def test_pipeline_timing_merge_preserves_the_first_server_mark(self):
+        merged = _merge_pipeline_timing(
+            {
+                "trace_id": "trace",
+                "server_events": {"tts_request_start": {"epoch_ms": 1000.0}},
+            },
+            {
+                "trace_id": "trace",
+                "server_events": {"tts_request_start": {"epoch_ms": 2000.0}},
+                "client_events": {"audio_playback_start": 2100.0},
+            },
+        )
+        self.assertEqual(merged["server_events"]["tts_request_start"]["epoch_ms"], 1000.0)
+        self.assertEqual(merged["client_events"]["audio_playback_start"], 2100.0)
+
+
+    def test_sentence_chunking_never_splits_an_incomplete_sentence(self):
+        chunks, remainder = _take_completed_speech_chunks("Thanks for coming. I am still", flush=False)
+        self.assertEqual(chunks, ["Thanks for coming."])
+        self.assertEqual(remainder, "I am still")
+        chunks, remainder = _take_completed_speech_chunks(remainder, flush=True)
+        self.assertEqual(chunks, ["I am still"])
+        self.assertEqual(remainder, "")
+
+    def test_timing_snapshot_derives_cross_stage_latency(self):
+        timing = VoicePipelineTiming(
+            {
+                "trace_id": "trace",
+                "events": {
+                    "stt_start": 900.0,
+                    "recording_end": 1000.0,
+                    "stt_completion": 1100.0,
+                    "tts_text_first_usable": 1300.0,
+                    "tts_request_start": 1400.0,
+                    "first_tts_audio_data": 1500.0,
+                    "audio_playback_start": 1550.0,
+                    "client_pipeline_complete": 1700.0,
+                },
+                "server_events": {
+                    "gpt_request_start": {"epoch_ms": 1200.0},
+                    "gpt_first_output": {"epoch_ms": 1250.0},
+                    "response_complete": {"epoch_ms": 1600.0},
+                },
+            }
+        )
+        durations = timing.snapshot()["durations_ms"]
+        self.assertEqual(durations["stt_start_to_stt_completion"], 200.0)
+        self.assertEqual(durations["recording_end_to_stt_completion"], 100.0)
+        self.assertEqual(durations["stt_completion_to_gpt_request_start"], 100.0)
+        self.assertEqual(durations["stt_completion_to_gpt_first_output"], 150.0)
+        self.assertEqual(durations["gpt_first_output_to_first_usable_tts_text"], 50.0)
+        self.assertEqual(durations["first_usable_tts_text_to_tts_request"], 100.0)
+        self.assertEqual(durations["tts_request_to_first_audio_data"], 100.0)
+        self.assertEqual(durations["first_audio_data_to_playback_start"], 50.0)
+        self.assertEqual(durations["gpt_first_output_to_audio_playback"], 300.0)
+        self.assertEqual(durations["recording_end_to_first_audible_response"], 550.0)
+        self.assertEqual(durations["response_generation_to_client_pipeline_complete"], 100.0)
+
+    @patch("vip.views._generate_assistant_response")
+    def test_streaming_turn_persists_final_text_and_emits_sse(self, generate):
+        generate.return_value = (
+            "Thanks for coming. I am listening.",
+            False,
+            {
+                "current_stage": "middle",
+                "phase": "normal",
+                "voice_metadata": "female voice, calm",
+            },
+        )
+        session = ChatSession.objects.create(
+            student=self.professor,
+            role_prompt=self.prompt,
+            active_turn_id="stream-turn-1",
+        )
+        ChatMessage.objects.create(
+            session=session,
+            sender=ChatMessage.Sender.STUDENT,
+            content="Please tell me more.",
+            turn_id="stream-turn-1",
+        )
+        request = RequestFactory().post(
+            "/professor/test-chat/",
+            {"voice_timing": json.dumps({"trace_id": "test-trace", "events": {}})},
+            HTTP_ACCEPT="text/event-stream",
+        )
+        response_chunks = list(
+            _stream_chat_response(
+                request,
+                self.prompt.content,
+                session,
+                self.prompt,
+                "vip:professor_test_chat",
+                "Professor",
+                turn_id="stream-turn-1",
+            )
+        )
+        self.assertTrue(any('event: assistant_final' in chunk for chunk in response_chunks))
+        self.assertTrue(any('event: complete' in chunk for chunk in response_chunks))
+        complete_payload = next(
+            json.loads(line[6:])
+            for chunk in response_chunks
+            for line in chunk.splitlines()
+            if line.startswith("data: ") and '"event": "complete"' in line
+        )
+        self.assertIn("tts_text_first_usable", complete_payload["timings"]["server_events"])
+        self.assertIn("response_complete", complete_payload["timings"]["server_events"])
+        self.assertEqual(
+            session.messages.order_by("created_at").last().content,
+            "Thanks for coming. I am listening.",
+        )
+
+    @patch("vip.views._generate_assistant_response")
+    def test_streaming_turn_forwards_intermediate_text_before_completion(self, generate):
+        def generate_stream(*_args, stream_callback=None, **_kwargs):
+            stream_callback({"kind": "gpt_delta", "text": "Thanks for coming."})
+            return (
+                "Thanks for coming.",
+                False,
+                {"current_stage": "middle", "phase": "normal", "voice_metadata": "female voice, calm"},
+            )
+
+        generate.side_effect = generate_stream
+        session = ChatSession.objects.create(
+            student=self.professor,
+            role_prompt=self.prompt,
+            active_turn_id="stream-turn-2",
+        )
+        ChatMessage.objects.create(
+            session=session,
+            sender=ChatMessage.Sender.STUDENT,
+            content="Please tell me more.",
+            turn_id="stream-turn-2",
+        )
+        request = RequestFactory().post(
+            "/professor/test-chat/",
+            {"voice_timing": json.dumps({"trace_id": "live-trace", "events": {}})},
+            HTTP_ACCEPT="text/event-stream",
+        )
+        chunks = list(
+            _stream_chat_response(
+                request,
+                self.prompt.content,
+                session,
+                self.prompt,
+                "vip:professor_test_chat",
+                "Professor",
+                turn_id="stream-turn-2",
+            )
+        )
+        event_names = [chunk.splitlines()[0] for chunk in chunks]
+        self.assertLess(event_names.index("event: assistant_delta"), event_names.index("event: complete"))
+        self.assertLess(event_names.index("event: speech_chunk"), event_names.index("event: complete"))
+        self.assertLess(event_names.index("event: assistant_delta"), event_names.index("event: speech_chunk"))
+
+        speech_payload = next(chunk for chunk in chunks if chunk.startswith("event: speech_chunk"))
+        self.assertIn('"event_sequence":', speech_payload)
+
+    @patch("vip.views._load_api_key_from_txt", return_value="test-key")
+    @patch("openai.OpenAI")
+    def test_streaming_tts_forwards_audio_chunks(self, openai_client, _api_key):
+        streaming_response = MagicMock()
+        streaming_response.__enter__.return_value.iter_bytes.return_value = [b"first", b"second"]
+        openai_client.return_value.audio.speech.with_streaming_response.create.return_value = streaming_response
+        request = RequestFactory().get(
+            "/student/stream-tts/",
+            {"text": "A short sentence.", "voice_metadata": "female voice, calm", "trace_id": "trace"},
+        )
+        request.user = self.professor
+
+        response = student_stream_tts(request)
+
+        self.assertEqual(b"".join(response.streaming_content), b"firstsecond")
+        kwargs = openai_client.return_value.audio.speech.with_streaming_response.create.call_args.kwargs
+        self.assertEqual(kwargs["input"], "A short sentence.")
+        self.assertEqual(kwargs["instructions"], "female voice, calm")
+        self.assertEqual(kwargs["stream_format"], "audio")

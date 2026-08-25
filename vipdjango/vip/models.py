@@ -37,6 +37,12 @@ class ChatSession(models.Model):
     conversation_stage = models.CharField(max_length=20, default="beginning")
     conversation_phase = models.CharField(max_length=32, default="normal")
     completion_status = models.BooleanField(default=False)
+    # Only one learner turn may be in flight for a session.  The claim is
+    # cleared when the matching assistant response is committed or the
+    # request is released after an error/cancellation.
+    active_turn_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    active_claim_id = models.CharField(max_length=64, blank=True, default="")
+    last_completed_turn_id = models.CharField(max_length=64, blank=True, default="")
 
     def __str__(self):
         return f"Session {self.id} - {self.student}"
@@ -55,7 +61,22 @@ class ChatMessage(models.Model):
     sender = models.CharField(max_length=20, choices=Sender.choices)
     content = models.TextField()
     voice_metadata = models.TextField(blank=True, default="")
+    # The complete browser/server voice trace for the turn that produced this
+    # message.  Keeping it with the transcript makes timing downloadable.
+    pipeline_timing = models.JSONField(blank=True, default=dict)
+    # A client-generated ID ties the learner message to exactly one assistant
+    # response. Blank keeps legacy rows valid; new turns always provide it.
+    turn_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session", "sender", "turn_id"],
+                condition=~models.Q(turn_id=""),
+                name="unique_nonempty_message_turn_per_sender",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.sender} @ {self.created_at:%Y-%m-%d %H:%M}"

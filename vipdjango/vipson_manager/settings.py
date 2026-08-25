@@ -108,10 +108,19 @@ if DB_ENGINE == "postgres":
         }
     }
 else:
+    # Treat an empty environment variable the same as an unset one.  This is
+    # easy to trigger from an IDE/container environment and makes SQLite try
+    # to open an empty filename, resulting in "unable to open database file".
+    sqlite_path = os.getenv("SQLITE_PATH", "").strip()
+    if not sqlite_path:
+        sqlite_path = str(BASE_DIR / "db.sqlite3")
+    elif not os.path.isabs(sqlite_path):
+        sqlite_path = str(BASE_DIR / sqlite_path)
+
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": os.getenv("SQLITE_PATH", str(BASE_DIR / "db.sqlite3")).strip(),
+            "NAME": sqlite_path,
         }
     }
 

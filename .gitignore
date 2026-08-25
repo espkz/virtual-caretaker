@@ -17,3 +17,4 @@ venv/
 # Local scratch scripts
 scratch.py
 update.sh
+**/.DS_Store

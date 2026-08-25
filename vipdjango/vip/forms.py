@@ -19,22 +19,11 @@ class RolePromptForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2}),
         help_text="Optional speaking style. Example: warm, calm, relatively slow.",
     )
-    intro_voice_gender = forms.ChoiceField(
-        choices=[("female", "female"), ("male", "male")],
-        initial="female",
-        required=False,
-        help_text="Optional. If blank, uses Voice Gender.",
-    )
-    intro_voice_style = forms.CharField(
-        required=False,
-        widget=forms.Textarea(attrs={"rows": 2}),
-        help_text="Optional intro style. If blank, uses Voice Style.",
-    )
     introduction = forms.CharField(widget=forms.Textarea(attrs={"rows": 5}))
     opening_line = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
-        help_text="Optional. Use this only if you want a fixed first in-character response.",
+        help_text="Optional. Shown as the first in-character response after the learner greets the character.",
     )
     beginning = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}))
     begin_to_middle_cues = forms.CharField(
@@ -87,11 +76,6 @@ class RolePromptForm(forms.Form):
             "learner_role": find_section_by_aliases(sections, ["learner role", "user role"]),
             "voice_gender": voice_gender,
             "voice_style": find_section_by_aliases(sections, ["voice style", "voice instructions"]),
-            "intro_voice_gender": normalize_gender(
-                find_section_by_aliases(sections, ["introduction voice gender", "intro voice gender"]),
-                default=voice_gender,
-            ),
-            "intro_voice_style": find_section_by_aliases(sections, ["introduction voice style", "intro voice style"]),
             "introduction": find_section_by_aliases(sections, ["introduction", "introduction: greeting"]),
             "opening_line": find_section_by_aliases(sections, ["opening line"]),
             "beginning": find_section_by_aliases(sections, ["beginning", "conversation progression: beginning"]),
@@ -128,8 +112,6 @@ class RolePromptForm(forms.Form):
             block("Learner Role", data.get("learner_role")),
             block("Voice Gender", data.get("voice_gender")),
             block("Voice Style", data.get("voice_style")),
-            block("Introduction Voice Gender", data.get("intro_voice_gender")),
-            block("Introduction Voice Style", data.get("intro_voice_style")),
             block("Introduction", data.get("introduction")),
             block("Opening Line", data.get("opening_line")),
             block("Beginning", data.get("beginning")),
@@ -148,13 +130,6 @@ class RolePromptForm(forms.Form):
         if value not in {"female", "male"}:
             return "female"
         return value
-
-    def clean_intro_voice_gender(self):
-        value = (self.cleaned_data.get("intro_voice_gender") or "").strip().lower()
-        if value in {"female", "male"}:
-            return value
-        base = (self.cleaned_data.get("voice_gender") or "female").strip().lower()
-        return base if base in {"female", "male"} else "female"
 
 
 class StudentAccountCreateForm(forms.Form):

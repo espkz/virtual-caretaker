@@ -1,7 +1,7 @@
-Django>=5.2,<7.0
-openai>=1.104.2
-langgraph>=0.6.0
-gTTS>=2.5.4
-openpyxl>=3.1.5
-gunicorn>=23.0.0
+Django
+openai
+langgraph
+gTTS
+openpyxl
+gunicorn
 whitenoise

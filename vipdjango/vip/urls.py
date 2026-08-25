@@ -23,6 +23,8 @@ urlpatterns = [
     path('professor/logs/reset/', views.professor_reset_all_student_logs, name='professor_reset_all_student_logs'),
     path('student/', views.student_dashboard, name='student_dashboard'),
     path('student/messages/<int:message_id>/tts/', views.student_message_tts, name='student_message_tts'),
+    path('student/stream-tts/', views.student_stream_tts, name='student_stream_tts'),
+    path('student/voice-timing/', views.student_voice_timing, name='student_voice_timing'),
     path('student/sessions/<int:session_id>/download/', views.student_download_session, name='student_download_session'),
     path('dashboard/', views.dashboard, name='dashboard'),
 ]

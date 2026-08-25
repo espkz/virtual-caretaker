@@ -105,16 +105,6 @@
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.intro_voice_gender.id_for_label }}">Introduction Voice Gender (Optional)</label>
-                    {{ form.intro_voice_gender }}
-                </div>
-
-                <div class="field">
-                    <label for="{{ form.intro_voice_style.id_for_label }}">Introduction Voice Style (Optional)</label>
-                    {{ form.intro_voice_style }}
-                </div>
-
-                <div class="field">
                     <label for="{{ form.introduction.id_for_label }}">Introduction</label>
                     {{ form.introduction }}
                 </div>
@@ -202,8 +192,6 @@
         "id_learner_role",
         "id_voice_gender",
         "id_voice_style",
-        "id_intro_voice_gender",
-        "id_intro_voice_style",
         "id_introduction",
         "id_opening_line",
         "id_beginning",
@@ -235,8 +223,6 @@
             section("Learner Role", getValue("id_learner_role")) +
             section("Voice Gender", getValue("id_voice_gender")) +
             section("Voice Style", getValue("id_voice_style")) +
-            section("Introduction Voice Gender", getValue("id_intro_voice_gender")) +
-            section("Introduction Voice Style", getValue("id_intro_voice_style")) +
             section("Introduction", getValue("id_introduction")) +
             section("Opening Line", getValue("id_opening_line")) +
             section("Beginning", getValue("id_beginning")) +
