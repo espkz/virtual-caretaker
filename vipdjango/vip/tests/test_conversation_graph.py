@@ -64,6 +64,59 @@ class ConversationGraphTests(unittest.TestCase):
         self.assertFalse(result["complete"])
         self.assertEqual(result["current_stage"], "middle")
 
+    def test_objective_progress_is_initialized_and_carried_through_graph(self):
+        def respond(state):
+            return "response", "female voice, calm", "beginning", False, False, {
+                "active_objective": "next-steps",
+                "covered_objectives": ["situation"],
+                "unresolved_objectives": ["next-steps"],
+                "recent_topics": ["what happens next"],
+                "ending_ready": False,
+            }
+
+        graph = build_conversation_graph(respond)
+        result = graph.invoke({
+            "scenario": {
+                "objectives": [
+                    {"id": "situation"},
+                    {"id": "next-steps"},
+                ],
+            },
+            "current_turn": 2,
+            "current_stage": "beginning",
+            "max_turns": MAX_TURNS,
+        })
+
+        self.assertEqual(result["active_objective"], "next-steps")
+        self.assertEqual(result["covered_objectives"], ["situation"])
+        self.assertEqual(result["unresolved_objectives"], ["next-steps"])
+        self.assertEqual(result["recent_topics"], ["what happens next"])
+        self.assertFalse(result["ending_ready"])
+
+    def test_objective_state_ignores_unknown_ids_and_selects_first_unresolved(self):
+        def respond(state):
+            return "response", "", "beginning", False, False, {}
+
+        graph = build_conversation_graph(respond)
+        result = graph.invoke({
+            "scenario": {
+                "objectives": [
+                    {"id": "first"},
+                    {"id": "second"},
+                ],
+            },
+            "active_objective": "unknown",
+            "covered_objectives": ["unknown"],
+            "unresolved_objectives": ["second", "unknown"],
+            "current_turn": 2,
+            "current_stage": "beginning",
+            "max_turns": MAX_TURNS,
+        })
+
+        self.assertEqual(result["active_objective"], "second")
+        self.assertEqual(result["covered_objectives"], [])
+        self.assertEqual(result["unresolved_objectives"], ["second"])
+
 
 if __name__ == "__main__":
     unittest.main()

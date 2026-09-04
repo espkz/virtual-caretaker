@@ -11,9 +11,13 @@ _STAGE_ORDER = {"beginning": 0, "middle": 1, "ending": 2}
 
 
 class ConversationState(TypedDict, total=False):
-    role_text: str
     scenario: dict[str, Any]
     history: list[dict[str, str]]
+    active_objective: str
+    covered_objectives: list[str]
+    unresolved_objectives: list[str]
+    recent_topics: list[str]
+    ending_ready: bool
     current_turn: int
     target_turns: int
     max_turns: int
@@ -30,14 +34,28 @@ class ConversationState(TypedDict, total=False):
     interrupt_requested: bool
     introduction_emitted: bool
     protocol_emitted: bool
-    # Runtime-only hooks used by the optional voice streaming adapter. They
-    # are deliberately not persisted as conversation state.
-    stream_callback: Callable[[dict[str, Any]], None]
+    # Runtime-only hook used for timing diagnostics. It is deliberately not
+    # persisted as conversation state.
     timing_callback: Callable[[str], None]
+    # Per-request diagnostics; kept in memory and returned in debug_info, but
+    # not carried between learner turns as conversation policy.
+    context_measurements: list[dict[str, Any]]
     debug_info: dict[str, Any]
 
 
 ResponseFn = Callable[[ConversationState], tuple[str, str, str, bool, bool, dict[str, Any]]]
+
+
+def _objective_ids(scenario):
+    return [
+        objective.get("id", "").strip()
+        for objective in (scenario or {}).get("objectives", [])
+        if isinstance(objective, dict) and objective.get("id", "").strip()
+    ]
+
+
+def _valid_objective_ids(values, valid_ids):
+    return list(dict.fromkeys(value for value in (values or []) if value in valid_ids))
 
 
 def _phase_for_turn(turn: int) -> str:
@@ -59,8 +77,24 @@ def build_conversation_graph(response_fn: ResponseFn):
         current_turn = state.get("current_turn", 0)
         if current_turn > max_turns:
             raise ValueError("Conversation turn limit exceeded.")
+        valid_objectives = _objective_ids(state.get("scenario"))
+        covered_objectives = _valid_objective_ids(state.get("covered_objectives"), valid_objectives)
+        unresolved_objectives = _valid_objective_ids(state.get("unresolved_objectives"), valid_objectives)
+        if valid_objectives and not covered_objectives and not unresolved_objectives:
+            unresolved_objectives = list(valid_objectives)
+        unresolved_objectives = [
+            objective_id for objective_id in unresolved_objectives if objective_id not in covered_objectives
+        ]
+        active_objective = state.get("active_objective", "")
+        if active_objective not in unresolved_objectives:
+            active_objective = unresolved_objectives[0] if unresolved_objectives else ""
         return {
             **state,
+            "active_objective": active_objective,
+            "covered_objectives": covered_objectives,
+            "unresolved_objectives": unresolved_objectives,
+            "recent_topics": list(state.get("recent_topics", [])),
+            "ending_ready": bool(state.get("ending_ready", False)),
             "target_turns": target_turns,
             "max_turns": max_turns,
             "turns_remaining": max(0, max_turns - current_turn),
@@ -94,7 +128,7 @@ def build_conversation_graph(response_fn: ResponseFn):
             # semantic transition signal. Do not discard it because a second,
             # redundant readiness flag was false or omitted.
             transition_ready = True
-        return {
+        updated_state = {
             **state,
             "response": response,
             "voice_metadata": voice,
@@ -106,6 +140,16 @@ def build_conversation_graph(response_fn: ResponseFn):
             "interrupt_requested": interrupted,
             "debug_info": debug_info,
         }
+        for field in (
+            "active_objective",
+            "covered_objectives",
+            "unresolved_objectives",
+            "recent_topics",
+            "ending_ready",
+        ):
+            if field in debug_info:
+                updated_state[field] = debug_info[field]
+        return updated_state
 
     def finalize(state: ConversationState) -> ConversationState:
         # Completion is semantic. The graph must not turn either the soft

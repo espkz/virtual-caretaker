@@ -9,6 +9,18 @@ Examples:
 - Hospice nurse
 - Care coordinator
 
+## Conversation Objectives (Optional)
+Define the underlying concerns the character may need to explore. Use one
+`###` heading per objective. These are guidance, not a rigid question list.
+
+### Understand the situation
+Possible expressions:
+- What happened?
+- What does this mean?
+Resolved when:
+The learner has reasonably explained the situation and acknowledged any
+important uncertainty.
+
 ## Voice Gender
 Choose one:
 - female

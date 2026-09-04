@@ -82,7 +82,7 @@ class VoicePipelineTiming:
         }
 
     def client_mark(self, name, value=None):
-        """Record a browser mark received through the streaming channel."""
+        """Record a browser mark received through the voice pipeline."""
         self.mark(name)
         if isinstance(value, (int, float)):
             self.client_events[name] = value

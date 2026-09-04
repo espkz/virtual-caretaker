@@ -138,7 +138,6 @@
                 </label>
                 <div class="voice-actions"></div>
                 <div id="stt-status" class="voice-status"></div>
-                <div id="streaming-voice-status" class="voice-status"></div>
                 <div class="compose-row">
                     <textarea id="student-message-input" name="message" placeholder="Type your message here..." required></textarea>
                     <button type="submit" class="send-button-inline" id="send-message-btn">Send</button>
@@ -176,7 +175,6 @@
         const sendMessageBtn = document.getElementById("send-message-btn");
         const micToggleBtn = document.getElementById("stt-toggle");
         const status = document.getElementById("stt-status");
-        const streamingStatus = document.getElementById("streaming-voice-status");
         const voiceTimingInput = document.getElementById("voice-timing");
         const voiceTurnInput = document.getElementById("voice-turn-id");
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -380,13 +378,6 @@
                 if (micToggleBtn) {
                     micToggleBtn.disabled = true;
                 }
-                // Typed and microphone turns use the same incremental server
-                // response, so both can begin audio as soon as a sentence is
-                // available.  The ordinary POST remains the browser fallback.
-                if (window.ReadableStream) {
-                    event.preventDefault();
-                    streamVoiceConversation();
-                }
             });
         }
 
@@ -400,286 +391,12 @@
                 localStorage.setItem("emotion_voice_enabled", emotionToggle.checked ? "1" : "0");
             });
         }
-        const streamTTSUrl = "{% url 'vip:student_stream_tts' %}";
         const voiceTimingUrl = "{% url 'vip:student_voice_timing' %}";
-        let voiceAudioQueue = Promise.resolve();
-        let activeStreamAudio = null;
-        let activeStreamAudioCancel = null;
-        let streamAudioGeneration = 0;
-        let streamController = null;
-        let activeStreamTurnId = "";
-        let lastStreamEventSequence = 0;
-        let streamSpeechIndexes = new Set();
-        let streamCompletionHandled = false;
-        let streamingCard = null;
-        let streamingText = "";
-
-        function cancelQueuedStreamAudio() {
-            streamAudioGeneration += 1;
-            if (activeStreamAudioCancel) {
-                activeStreamAudioCancel();
-                activeStreamAudioCancel = null;
-            }
-            if (activeStreamAudio) {
-                activeStreamAudio.pause();
-                activeStreamAudio.removeAttribute("src");
-                activeStreamAudio.load();
-                activeStreamAudio = null;
-            }
-            voiceAudioQueue = Promise.resolve();
-        }
-
-        function csrfToken() {
-            const cookie = document.cookie.split(";").map(function (part) { return part.trim(); })
-                .find(function (part) { return part.indexOf("csrftoken=") === 0; });
-            return cookie ? decodeURIComponent(cookie.substring("csrftoken=".length)) : "";
-        }
-
-        function ensureStreamingCard() {
-            if (streamingCard || !chatWindow) {
-                return streamingCard;
-            }
-            streamingCard = document.createElement("article");
-            streamingCard.className = "chat-message assistant";
-            const meta = document.createElement("div");
-            meta.className = "chat-meta";
-            meta.textContent = "AI | responding...";
-            const content = document.createElement("div");
-            content.className = "streaming-assistant-text";
-            streamingCard.appendChild(meta);
-            streamingCard.appendChild(content);
-            chatWindow.appendChild(streamingCard);
-            chatWindow.scrollTop = chatWindow.scrollHeight;
-            return streamingCard;
-        }
-
-        function updateStreamingText(text, replace) {
-            const card = ensureStreamingCard();
-            if (!card) {
-                return;
-            }
-            streamingText = replace ? (text || "") : streamingText + (text || "");
-            card.querySelector(".streaming-assistant-text").textContent = streamingText;
-            chatWindow.scrollTop = chatWindow.scrollHeight;
-            markVoiceTiming("response_display");
-        }
-
-        function queueSpeechChunk(text, metadata, traceId, index, messageId, turnId, sessionId) {
-            if (!text) {
-                return;
-            }
-            const numericIndex = Number(index);
-            if (Number.isInteger(numericIndex) && numericIndex > 0) {
-                if (streamSpeechIndexes.has(numericIndex)) {
-                    return;
-                }
-                streamSpeechIndexes.add(numericIndex);
-            }
-            const generation = streamAudioGeneration;
-            markVoiceTiming("tts_text_first_usable");
-            voiceAudioQueue = voiceAudioQueue.then(async function () {
-                if (generation !== streamAudioGeneration) {
-                    return;
-                }
-                if (streamingStatus) {
-                    streamingStatus.textContent = "Generating voice...";
-                }
-                markVoiceTiming("tts_request_start");
-                const audioParams = new URLSearchParams();
-                audioParams.set("text", text);
-                audioParams.set("voice_metadata", metadata || "Speak naturally and clearly.");
-                audioParams.set("trace_id", traceId || voiceTiming.trace_id);
-                audioParams.set("emotion", emotionToggle && emotionToggle.checked ? "1" : "0");
-                if (sessionId || currentSessionId) {
-                    audioParams.set("session_id", sessionId || currentSessionId);
-                }
-                if (messageId) {
-                    audioParams.set("message_id", messageId);
-                }
-                if (turnId) {
-                    audioParams.set("turn_id", turnId);
-                }
-                const audio = new Audio(streamTTSUrl + "?" + audioParams.toString());
-                activeStreamAudio = audio;
-                let cancelled = false;
-                let resolvePlayback;
-                const playbackDone = new Promise(function (resolve) {
-                    resolvePlayback = resolve;
-                });
-                const cancelPlayback = function () {
-                    cancelled = true;
-                    resolvePlayback();
-                };
-                activeStreamAudioCancel = cancelPlayback;
-                audio.addEventListener("canplay", function () {
-                    markVoiceTiming("first_tts_audio_data");
-                    markVoiceTiming("tts_first_audio_chunk");
-                }, {once: true});
-                audio.addEventListener("playing", function () {
-                    markVoiceTiming("audio_playback_start");
-                    if (streamingStatus) {
-                        streamingStatus.textContent = "Voice playing...";
-                    }
-                }, {once: true});
-                audio.addEventListener("ended", resolvePlayback, {once: true});
-                audio.addEventListener("error", resolvePlayback, {once: true});
-                audio.addEventListener("abort", resolvePlayback, {once: true});
-                try {
-                    await audio.play();
-                    await playbackDone;
-                } catch (error) {
-                    if (!cancelled && streamingStatus) {
-                        streamingStatus.textContent = "Voice autoplay was blocked; use the message Play Voice button.";
-                    }
-                } finally {
-                    if (activeStreamAudio === audio) {
-                        activeStreamAudio = null;
-                        activeStreamAudioCancel = null;
-                    }
-                }
-            }).catch(function (error) {
-                if (streamingStatus) {
-                    streamingStatus.textContent = error.message || "Streamed voice failed.";
-                }
-            });
-        }
-
-        function handleVoiceStreamEvent(data) {
-            if (!data || !data.event) {
-                return;
-            }
-            if (data.turn_id && activeStreamTurnId && data.turn_id !== activeStreamTurnId) {
-                return;
-            }
-            if (data.event_sequence && data.event_sequence <= lastStreamEventSequence) {
-                return;
-            }
-            if (data.event_sequence) {
-                lastStreamEventSequence = data.event_sequence;
-            }
-            if (data.event === "assistant_delta") {
-                updateStreamingText(data.text, false);
-            } else if (data.event === "assistant_final") {
-                updateStreamingText(data.text, true);
-            } else if (data.event === "assistant_reset") {
-                cancelQueuedStreamAudio();
-                streamSpeechIndexes.clear();
-                updateStreamingText("", true);
-            } else if (data.event === "speech_chunk") {
-                queueSpeechChunk(
-                    data.text,
-                    data.voice_metadata,
-                    data.trace_id,
-                    data.index,
-                    data.message_id,
-                    data.turn_id || activeStreamTurnId,
-                    data.session_id
-                );
-            } else if (data.event === "stream_started") {
-                if (streamingStatus) {
-                    streamingStatus.textContent = "Assistant is responding...";
-                }
-            } else if (data.event === "complete") {
-                if (streamCompletionHandled) {
-                    return;
-                }
-                streamCompletionHandled = true;
-                markVoiceTiming("response_complete");
-                if (streamingStatus) {
-                    streamingStatus.textContent = "Response complete.";
-                }
-                if (data.timings && data.timings.server_events) {
-                    voiceTiming.server_events = data.timings.server_events;
-                }
-                console.info("voice_pipeline", data.timings);
-                voiceAudioQueue.then(function () {
-                    markVoiceTiming("client_pipeline_complete");
-                    reportVoiceTiming(data.message_id, data.turn_id || activeStreamTurnId, data.session_id);
-                    if (data.redirect_url) {
-                        window.location.assign(data.redirect_url);
-                    }
-                });
-            } else if (data.event === "error") {
-                throw new Error(data.message || "Assistant response failed.");
-            }
-        }
-
-        async function streamVoiceConversation() {
-            flushVoiceTiming();
-            if (streamController) {
-                streamController.abort();
-            }
-            activeStreamTurnId = ensureTurnId();
-            lastStreamEventSequence = 0;
-            streamSpeechIndexes.clear();
-            streamCompletionHandled = false;
-            cancelQueuedStreamAudio();
-            const requestController = new AbortController();
-            streamController = requestController;
-            try {
-                const response = await fetch(messageForm.getAttribute("action") || window.location.href, {
-                    method: "POST",
-                    headers: {"Accept": "text/event-stream", "X-Requested-With": "fetch"},
-                    body: new FormData(messageForm),
-                    signal: requestController.signal
-                });
-                if (!response.ok || !response.body) {
-                    throw new Error("Voice response streaming is unavailable.");
-                }
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let pending = "";
-                function consume(chunk) {
-                    pending += chunk;
-                    const blocks = pending.split("\n\n");
-                    pending = blocks.pop() || "";
-                    blocks.forEach(function (block) {
-                        const line = block.split("\n").find(function (item) { return item.indexOf("data: ") === 0; });
-                        if (line) {
-                            handleVoiceStreamEvent(JSON.parse(line.substring(6)));
-                        }
-                    });
-                }
-                while (true) {
-                    const part = await reader.read();
-                    consume(decoder.decode(part.value || new Uint8Array(), {stream: !part.done}));
-                    if (part.done) {
-                        break;
-                    }
-                }
-                if (pending.trim()) {
-                    const line = pending.split("\n").find(function (item) { return item.indexOf("data: ") === 0; });
-                    if (line) {
-                        handleVoiceStreamEvent(JSON.parse(line.substring(6)));
-                    }
-                }
-            } catch (error) {
-                if (streamController !== requestController) {
-                    return;
-                }
-                if (error.name !== "AbortError" && streamingStatus) {
-                    streamingStatus.textContent = error.message || "Voice response failed.";
-                }
-                messageForm.dataset.sending = "";
-                if (micToggleBtn) {
-                    micToggleBtn.disabled = false;
-                }
-            } finally {
-                if (streamController === requestController) {
-                    streamController = null;
-                }
-            }
-        }
-
         const ttsButtons = document.querySelectorAll(".tts-button");
         const audioRequests = new WeakMap();
         function stopAllOtherAudio(exceptAudio) {
             document.querySelectorAll(".message-audio-controls audio").forEach(function (audio) {
                 if (audio !== exceptAudio) {
-                    const state = audioRequests.get(audio);
-                    if (state && state.controller) {
-                        state.controller.abort();
-                    }
                     audio.pause();
                     audio.currentTime = 0;
                     audio.removeAttribute("src");
@@ -700,19 +417,9 @@
                 return;
             }
 
-            if (streamController) {
-                streamController.abort();
-                activeStreamTurnId = "";
-                streamCompletionHandled = true;
-            }
-            cancelQueuedStreamAudio();
             const previousRequest = audioRequests.get(audioPlayer);
-            if (previousRequest && previousRequest.controller) {
-                previousRequest.controller.abort();
-            }
             const requestState = {
                 generation: (previousRequest ? previousRequest.generation : 0) + 1,
-                controller: new AbortController(),
             };
             audioRequests.set(audioPlayer, requestState);
             try {
@@ -721,14 +428,15 @@
                 }
                 markVoiceTiming("tts_text_first_usable");
                 markVoiceTiming("tts_request_start");
-                const streamUrl = url + "?emotion=" + emotionFlag + "&trace=" + encodeURIComponent(voiceTiming.trace_id);
+                const audioUrl = url + "?emotion=" + emotionFlag + "&trace=" + encodeURIComponent(voiceTiming.trace_id);
                 if (audioRequests.get(audioPlayer) !== requestState) {
                     return;
                 }
                 stopAllOtherAudio(audioPlayer);
                 audioPlayer.pause();
                 audioPlayer.currentTime = 0;
-                audioPlayer.src = streamUrl;
+                audioPlayer.src = audioUrl;
+                audioPlayer.load();
                 if (audioStatus) {
                     audioStatus.textContent = "Voice ready. Playing...";
                 }
@@ -751,9 +459,8 @@
                     alert(err.message || "TTS failed.");
                 }
             } finally {
-                if (audioRequests.get(audioPlayer) === requestState) {
-                    requestState.controller = null;
-                }
+                // The audio element owns the completed request. The generation
+                // guard prevents a stale play call from changing its status.
             }
         }
 
@@ -784,10 +491,6 @@
 
             if (stopBtn) {
                 stopBtn.addEventListener("click", function () {
-                    const state = audioRequests.get(audio);
-                    if (state && state.controller) {
-                        state.controller.abort();
-                    }
                     audioRequests.delete(audio);
                     audio.pause();
                     audio.currentTime = 0;

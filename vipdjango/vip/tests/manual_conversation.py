@@ -28,7 +28,10 @@ class Message:
 
 
 def scenario_files():
-    return sorted((REPO_ROOT / "prompts").glob("*_prompt.md"))
+    return sorted(
+        path for path in (REPO_ROOT / "prompts").glob("role_*.md")
+        if path.name != "role_prompt.md"
+    )
 
 
 def load_scenario(path):
@@ -83,12 +86,14 @@ def run(args, input_fn=input, output_fn=print, engine=None):
     scenario_path = Path(args.scenario) if args.scenario else choose_scenario(files, input_fn, output_fn)
     role_text = load_scenario(scenario_path)
     if engine is None:
-        with open('/Users/espaek/PycharmProjects/virtual-caretaker/virtual-caretaker/api_key.txt') as f:
-            key = args.api_key or f.read()
+        api_key_path = REPO_ROOT / "api_key.txt"
+        key = args.api_key or os.getenv("OPENAI_API_KEY", "").strip()
+        if not key and api_key_path.exists():
+            key = api_key_path.read_text(encoding="utf-8").strip()
         if not key:
             raise RuntimeError("OPENAI_API_KEY is required for the live tester.")
-        template = (REPO_ROOT / "prompts" / "prompt_template.md").read_text(encoding="utf-8")
-        engine = ConversationEngine(template.split("{role}", 1)[0] if "{role}" in template else template, key)
+        global_prompt = (REPO_ROOT / "prompts" / "global_prompt.md").read_text(encoding="utf-8")
+        engine = ConversationEngine(global_prompt, key)
     messages = []
     debug = {"stage": "beginning", "completion_status": False}
     saved = False

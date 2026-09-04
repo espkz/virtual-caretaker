@@ -1,0 +1,771 @@
+Student: admintest1
+Prompt: Rachel Ellison Updated Scenario 1
+Session ID: 46
+Started: 2026-08-31 16:39:35.336760+00:00
+
+[2026-08-31 16:39:35.341426+00:00] Assistant: Welcome to the virtual patient simulation. Today, you are speaking with Rachel Ellison, the daughter of Margaret Ellison, a 66-year-old woman receiving home health care after a severe brain injury. Rachel is supposed to learn tracheostomy suctioning and PEG tube free-water flushes, but she has questions about her mother's condition before she can focus on the training. When you're ready, introduce yourself as the home-health nurse. Explain that you are here to help teach Rachel to participate in her mother’s care. Offer to answer any questions she has before you begin.
+
+[2026-08-31 16:39:44.915657+00:00] Student: hello
+
+[2026-08-31 16:39:56.893147+00:00] Assistant: Nice to meet you. I’m sorry, I’m still just a little overwhelmed seeing her like this. I feel like I don’t know anything. Is she just going to be like this forever?
+Voice metadata: female voice, tense, worried, emotionally tired, direct but not hostile, natural pauses
+Voice pipeline timing:
+Trace ID: 3ca9bbbc-aab2-4ce9-b7bc-d236d7a564ce
+Client Events:
+  response_display: 1788194397874.3
+  tts_text_first_usable: 1788194397879
+  tts_request_start: 1788194397879.3
+  response_complete: 1788194397895.3
+  first_tts_audio_data: 1788194400538.1
+  tts_first_audio_chunk: 1788194400538.1
+  audio_playback_start: 1788194400538.2
+  client_pipeline_complete: 1788194420571.5
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194384918.6}
+  interrupt_request_start: {"elapsed_ms": 495.0, "epoch_ms": 1788194385413.6}
+  interrupt_request_complete: {"elapsed_ms": 11972.2, "epoch_ms": 1788194396890.7}
+  tts_text_first_usable: {"elapsed_ms": 11978.2, "epoch_ms": 1788194396896.7}
+  response_generation_complete: {"elapsed_ms": 11978.5, "epoch_ms": 1788194396897.0}
+  response_complete: {"elapsed_ms": 11978.5, "epoch_ms": 1788194396897.0}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194396920.6}
+  tts_first_audio_data: {"elapsed_ms": 2005.0, "epoch_ms": 1788194398925.6}
+  tts_first_audio_chunk: {"elapsed_ms": 2005.0, "epoch_ms": 1788194398925.6}
+  tts_completion: {"elapsed_ms": 2122.3, "epoch_ms": 1788194399042.9}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788194419609.5}
+Durations (ms): {"first_audio_data_to_playback_start": 1612.6, "first_usable_tts_text_to_tts_request": 23.9, "gpt_first_output_to_audio_playback": null, "gpt_first_output_to_first_usable_tts_text": null, "gpt_first_output_to_tts_request": null, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 23674.5, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 2005.0}
+
+[2026-08-31 16:40:56.543775+00:00] Student: Oh. I dont know the answer to that. Let me sit with you and you can ask me any questions you want.
+
+[2026-08-31 16:41:10.895942+00:00] Assistant: Thank you for sitting with me. This is really hard to take in, and I’m trying to understand what’s happening. Could you tell me, in plain terms, what her current prognosis looks like?
+Voice metadata: female voice, tense, worried, emotionally tired, direct
+Voice pipeline timing:
+Trace ID: c940118a-7646-4f6b-8e9f-b3389c44c194
+Client Events:
+  response_display: 1788194471909.3
+  tts_text_first_usable: 1788194472126.4001
+  response_complete: 1788194472126.6
+  tts_request_start: 1788194472127.1
+  first_tts_audio_data: 1788194473608.5
+  tts_first_audio_chunk: 1788194473608.5
+  audio_playback_start: 1788194473608.5
+  client_pipeline_complete: 1788194491503.4001
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194456546.6}
+  interrupt_request_start: {"elapsed_ms": 7.1, "epoch_ms": 1788194456553.7}
+  gpt_request_start: {"elapsed_ms": 11.2, "epoch_ms": 1788194456557.8}
+  gpt_first_output: {"elapsed_ms": 12118.1, "epoch_ms": 1788194468664.8}
+  interrupt_request_complete: {"elapsed_ms": 14331.4, "epoch_ms": 1788194470878.1}
+  gpt_completion: {"elapsed_ms": 14345.2, "epoch_ms": 1788194470891.8}
+  tts_text_first_usable: {"elapsed_ms": 14352.7, "epoch_ms": 1788194470899.4}
+  response_generation_complete: {"elapsed_ms": 14352.9, "epoch_ms": 1788194470899.5}
+  response_complete: {"elapsed_ms": 14352.9, "epoch_ms": 1788194470899.5}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194471121.5}
+  tts_first_audio_data: {"elapsed_ms": 765.4, "epoch_ms": 1788194471886.9}
+  tts_first_audio_chunk: {"elapsed_ms": 765.4, "epoch_ms": 1788194471886.9}
+  tts_completion: {"elapsed_ms": 1397.8, "epoch_ms": 1788194472519.3}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788194490589.6}
+Durations (ms): {"first_audio_data_to_playback_start": 1721.6, "first_usable_tts_text_to_tts_request": 222.1, "gpt_first_output_to_audio_playback": 4943.7, "gpt_first_output_to_first_usable_tts_text": 2234.6, "gpt_first_output_to_tts_request": 2456.7, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 20603.9, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 765.4}
+
+[2026-08-31 16:42:04.112597+00:00] Student: Of course. It may be best for you to tell me what you understand first. Is that OK?
+
+[2026-08-31 16:42:15.306569+00:00] Assistant: Okay. From what I’ve seen, she’s mostly unresponsive—eyes open sometimes, but no reliable responses—and six weeks feels like a long time. I’m trying to understand what’s realistic, not just hopeful. What do you think is the most important thing I should know about her prognosis right now?
+Voice metadata: female voice, tense, worried, emotionally tired, direct but compassionate
+Voice pipeline timing:
+Trace ID: cc7e2d9b-6c7f-479c-9ea9-b7041d7c758a
+Client Events:
+  response_display: 1788194536311.4
+  tts_text_first_usable: 1788194536783.2
+  tts_request_start: 1788194536783.7
+  response_complete: 1788194536817.0999
+  first_tts_audio_data: 1788194538310.4
+  tts_first_audio_chunk: 1788194538310.4
+  audio_playback_start: 1788194538310.5
+  client_pipeline_complete: 1788194566022.0999
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194524115.7}
+  interrupt_request_start: {"elapsed_ms": 6.9, "epoch_ms": 1788194524122.6}
+  gpt_request_start: {"elapsed_ms": 12.2, "epoch_ms": 1788194524127.9}
+  gpt_first_output: {"elapsed_ms": 10189.5, "epoch_ms": 1788194534305.1}
+  interrupt_request_complete: {"elapsed_ms": 11168.7, "epoch_ms": 1788194535284.3}
+  gpt_completion: {"elapsed_ms": 11186.0, "epoch_ms": 1788194535301.7}
+  tts_text_first_usable: {"elapsed_ms": 11194.2, "epoch_ms": 1788194535309.9}
+  response_generation_complete: {"elapsed_ms": 11194.4, "epoch_ms": 1788194535310.0}
+  response_complete: {"elapsed_ms": 11194.4, "epoch_ms": 1788194535310.0}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194535784.7}
+  tts_first_audio_data: {"elapsed_ms": 1017.2, "epoch_ms": 1788194536801.9}
+  tts_first_audio_chunk: {"elapsed_ms": 1017.2, "epoch_ms": 1788194536801.9}
+  tts_completion: {"elapsed_ms": 1026.3, "epoch_ms": 1788194536810.9}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788194565075.6}
+Durations (ms): {"first_audio_data_to_playback_start": 1508.6, "first_usable_tts_text_to_tts_request": 474.8, "gpt_first_output_to_audio_playback": 4005.4, "gpt_first_output_to_first_usable_tts_text": 1004.8, "gpt_first_output_to_tts_request": 1479.6, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 30712.1, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 1017.2}
+
+[2026-08-31 16:43:56.050942+00:00] Student: Yes, so she had a severe brain injury. It's not likely that she will make a full recovery. You may see small improvements over time. Like more eye contact. It's not possible to know for sure.
+
+[2026-08-31 16:44:15.520833+00:00] Assistant: I appreciate your honesty. Is six weeks too early to know how much her brain might recover?
+Voice metadata: female voice, tense, worried, emotionally tired, direct
+Voice pipeline timing:
+Trace ID: 96075588-a5b6-4781-9fa1-1c74dae0d1df
+Client Events:
+  response_display: 1788194644878.7
+  tts_text_first_usable: 1788194656504.4
+  tts_request_start: 1788194656505
+  response_complete: 1788194656540.6
+  first_tts_audio_data: 1788194659218.3
+  tts_first_audio_chunk: 1788194659218.3
+  audio_playback_start: 1788194659218.4
+  client_pipeline_complete: 1788194669461.7
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194636053.9}
+  interrupt_request_start: {"elapsed_ms": 7.4, "epoch_ms": 1788194636061.3}
+  gpt_request_start: {"elapsed_ms": 11.3, "epoch_ms": 1788194636065.2}
+  interrupt_request_complete: {"elapsed_ms": 6229.0, "epoch_ms": 1788194642282.9}
+  gpt_first_output: {"elapsed_ms": 7761.8, "epoch_ms": 1788194643815.7}
+  gpt_completion: {"elapsed_ms": 8264.4, "epoch_ms": 1788194644318.3}
+  tts_text_first_usable: {"elapsed_ms": 19471.1, "epoch_ms": 1788194655525.0}
+  response_generation_complete: {"elapsed_ms": 19471.2, "epoch_ms": 1788194655525.1}
+  response_complete: {"elapsed_ms": 19471.2, "epoch_ms": 1788194655525.1}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194655580.9}
+  tts_first_audio_data: {"elapsed_ms": 1684.3, "epoch_ms": 1788194657265.2}
+  tts_first_audio_chunk: {"elapsed_ms": 1684.3, "epoch_ms": 1788194657265.2}
+  tts_completion: {"elapsed_ms": 2146.6, "epoch_ms": 1788194657727.5}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788194668472.1}
+Durations (ms): {"first_audio_data_to_playback_start": 1953.2, "first_usable_tts_text_to_tts_request": 55.9, "gpt_first_output_to_audio_playback": 15402.7, "gpt_first_output_to_first_usable_tts_text": 11709.3, "gpt_first_output_to_tts_request": 11765.2, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 13936.6, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 1684.3}
+
+[2026-08-31 16:45:19.814516+00:00] Student: at six weeks it's likely that this is close to her new normal. Sometimes people can recover more but it's impossible to know
+
+[2026-08-31 16:45:26.434039+00:00] Assistant: Is my mother ever going to wake up?
+Voice metadata: female voice, tense, worried, emotionally tired
+Voice pipeline timing:
+Trace ID: 318c231a-b02c-4628-a5ab-f90a40aaaaa8
+Client Events:
+  response_display: 1788194727426.8
+  tts_text_first_usable: 1788194727578.4
+  response_complete: 1788194727578.5
+  tts_request_start: 1788194727579.5
+  first_tts_audio_data: 1788194729450.5
+  tts_first_audio_chunk: 1788194729450.5
+  audio_playback_start: 1788194729450.5999
+  client_pipeline_complete: 1788194733201.7
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194719817.4}
+  interrupt_request_start: {"elapsed_ms": 9.4, "epoch_ms": 1788194719826.8}
+  gpt_request_start: {"elapsed_ms": 16.8, "epoch_ms": 1788194719834.2}
+  gpt_first_output: {"elapsed_ms": 5563.9, "epoch_ms": 1788194725381.3}
+  interrupt_request_complete: {"elapsed_ms": 6602.4, "epoch_ms": 1788194726419.8}
+  gpt_completion: {"elapsed_ms": 6612.0, "epoch_ms": 1788194726429.4}
+  tts_text_first_usable: {"elapsed_ms": 6620.0, "epoch_ms": 1788194726437.4}
+  response_generation_complete: {"elapsed_ms": 6620.2, "epoch_ms": 1788194726437.6}
+  response_complete: {"elapsed_ms": 6620.2, "epoch_ms": 1788194726437.6}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194726601.3}
+  tts_first_audio_data: {"elapsed_ms": 1225.3, "epoch_ms": 1788194727826.6}
+  tts_first_audio_chunk: {"elapsed_ms": 1225.3, "epoch_ms": 1788194727826.6}
+  tts_completion: {"elapsed_ms": 1611.4, "epoch_ms": 1788194728212.7}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788194732224.4}
+Durations (ms): {"first_audio_data_to_playback_start": 1624.0, "first_usable_tts_text_to_tts_request": 163.9, "gpt_first_output_to_audio_playback": 4069.3, "gpt_first_output_to_first_usable_tts_text": 1056.1, "gpt_first_output_to_tts_request": 1220.0, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 6764.1, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 1225.3}
+
+[2026-08-31 16:45:43.294886+00:00] Student: I don't know. I hear you're worried
+
+[2026-08-31 16:45:54.447676+00:00] Assistant: Yes, I am worried. If there is any chance she could wake up, what would a realistic timeline and the signs look like in the coming weeks?
+Voice metadata: female voice, tense, worried, emotionally tired, direct but not hostile
+Voice pipeline timing:
+Trace ID: e641ffe3-7765-42a7-9d12-eb6bfe35ae30
+Client Events:
+  response_display: 1788194754504.1
+  tts_text_first_usable: 1788194755430.2
+  tts_request_start: 1788194755430.4001
+  response_complete: 1788194755597.3
+  first_tts_audio_data: 1788194756991.2
+  tts_first_audio_chunk: 1788194756991.2
+  audio_playback_start: 1788194756991.3
+  client_pipeline_complete: 1788194769541.7
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194743297.7}
+  interrupt_request_start: {"elapsed_ms": 8.4, "epoch_ms": 1788194743306.0}
+  gpt_request_start: {"elapsed_ms": 13.3, "epoch_ms": 1788194743311.0}
+  interrupt_request_complete: {"elapsed_ms": 5925.8, "epoch_ms": 1788194749223.5}
+  gpt_first_output: {"elapsed_ms": 10158.0, "epoch_ms": 1788194753455.6}
+  gpt_completion: {"elapsed_ms": 11144.8, "epoch_ms": 1788194754442.4}
+  tts_text_first_usable: {"elapsed_ms": 11153.7, "epoch_ms": 1788194754451.3}
+  response_generation_complete: {"elapsed_ms": 11153.8, "epoch_ms": 1788194754451.4}
+  response_complete: {"elapsed_ms": 11153.8, "epoch_ms": 1788194754451.5}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194754471.6}
+  tts_first_audio_data: {"elapsed_ms": 1186.7, "epoch_ms": 1788194755658.4}
+  tts_first_audio_chunk: {"elapsed_ms": 1186.7, "epoch_ms": 1788194755658.4}
+  tts_completion: {"elapsed_ms": 1220.5, "epoch_ms": 1788194755692.1}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788194768525.4}
+Durations (ms): {"first_audio_data_to_playback_start": 1332.9, "first_usable_tts_text_to_tts_request": 20.3, "gpt_first_output_to_audio_playback": 3535.7, "gpt_first_output_to_first_usable_tts_text": 995.7, "gpt_first_output_to_tts_request": 1016.0, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 15090.3, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 1186.8}
+
+[2026-08-31 16:46:32.922100+00:00] Student: Maybe some purposeful movement. eye tracking.
+
+[2026-08-31 16:46:44.436874+00:00] Assistant: Eye tracking can be a sign of wakefulness, but it isn’t proof that she understands or recognizes us. If you see more purposeful movement or steadier eye contact, in the next weeks what would be the clearest sign that she might actually recognize someone or respond?
+Voice metadata: female voice, tense, worried, emotionally tired, direct
+Voice pipeline timing:
+Trace ID: d71352ea-b74e-41c9-ba28-166722f77b36
+Client Events:
+  response_display: 1788194805472.3
+  tts_text_first_usable: 1788194805645.3
+  response_complete: 1788194805645.3
+  tts_request_start: 1788194805646
+  first_tts_audio_data: 1788194807028.6
+  tts_first_audio_chunk: 1788194807028.6
+  audio_playback_start: 1788194807028.9001
+  client_pipeline_complete: 1788194828760.3
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194792925.0}
+  interrupt_request_start: {"elapsed_ms": 6.5, "epoch_ms": 1788194792931.5}
+  gpt_request_start: {"elapsed_ms": 12.0, "epoch_ms": 1788194792937.1}
+  gpt_first_output: {"elapsed_ms": 8629.6, "epoch_ms": 1788194801554.6}
+  interrupt_request_complete: {"elapsed_ms": 11488.3, "epoch_ms": 1788194804413.4}
+  gpt_completion: {"elapsed_ms": 11506.0, "epoch_ms": 1788194804431.0}
+  tts_text_first_usable: {"elapsed_ms": 11515.6, "epoch_ms": 1788194804440.6}
+  response_generation_complete: {"elapsed_ms": 11515.7, "epoch_ms": 1788194804440.7}
+  response_complete: {"elapsed_ms": 11515.7, "epoch_ms": 1788194804440.7}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194804614.1}
+  tts_first_audio_data: {"elapsed_ms": 782.3, "epoch_ms": 1788194805396.4}
+  tts_first_audio_chunk: {"elapsed_ms": 782.3, "epoch_ms": 1788194805396.4}
+  tts_completion: {"elapsed_ms": 1812.3, "epoch_ms": 1788194806426.4}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788194827785.9}
+Durations (ms): {"first_audio_data_to_playback_start": 1632.5, "first_usable_tts_text_to_tts_request": 173.5, "gpt_first_output_to_audio_playback": 5474.3, "gpt_first_output_to_first_usable_tts_text": 2886.0, "gpt_first_output_to_tts_request": 3059.5, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 24319.6, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 782.3}
+
+[2026-08-31 16:47:28.468812+00:00] Student: I don't know. are there any other questions you have?
+
+[2026-08-31 16:47:40.388843+00:00] Assistant: Could we involve a brain injury specialist or an early rehab program now, or would six weeks be too late to even consider that option?
+Voice metadata: female voice, tense, worried, direct
+Voice pipeline timing:
+Trace ID: 5fcb5b19-4df6-41b2-b60c-ba55a25bd597
+Client Events:
+  response_display: 1788194859365.9001
+  tts_text_first_usable: 1788194861429.1
+  tts_request_start: 1788194861429.6
+  response_complete: 1788194861512
+  first_tts_audio_data: 1788194862752.1
+  tts_first_audio_chunk: 1788194862752.1
+  audio_playback_start: 1788194862752.2002
+  client_pipeline_complete: 1788194871661.3
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194848471.6}
+  interrupt_request_start: {"elapsed_ms": 8.7, "epoch_ms": 1788194848480.3}
+  gpt_request_start: {"elapsed_ms": 18.2, "epoch_ms": 1788194848489.8}
+  interrupt_request_complete: {"elapsed_ms": 5734.5, "epoch_ms": 1788194854206.1}
+  gpt_first_output: {"elapsed_ms": 9521.2, "epoch_ms": 1788194857992.8}
+  gpt_completion: {"elapsed_ms": 11911.5, "epoch_ms": 1788194860383.1}
+  tts_text_first_usable: {"elapsed_ms": 11920.7, "epoch_ms": 1788194860392.3}
+  response_generation_complete: {"elapsed_ms": 11920.9, "epoch_ms": 1788194860392.5}
+  response_complete: {"elapsed_ms": 11920.9, "epoch_ms": 1788194860392.5}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194860422.0}
+  tts_first_audio_data: {"elapsed_ms": 945.8, "epoch_ms": 1788194861367.8}
+  tts_first_audio_chunk: {"elapsed_ms": 945.8, "epoch_ms": 1788194861367.8}
+  tts_completion: {"elapsed_ms": 1786.6, "epoch_ms": 1788194862208.6}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788194870698.4}
+Durations (ms): {"first_audio_data_to_playback_start": 1384.4, "first_usable_tts_text_to_tts_request": 29.7, "gpt_first_output_to_audio_playback": 4759.4, "gpt_first_output_to_first_usable_tts_text": 2399.5, "gpt_first_output_to_tts_request": 2429.2, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 11268.8, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 945.8}
+
+[2026-08-31 16:48:34.831792+00:00] Student: Your team does have specialists. Rehab at this point is mostly passive range of motion and preventing complications of her condition
+
+[2026-08-31 16:48:53.745252+00:00] Assistant: So there are specialists on the team, but rehab right now is mostly passive range of motion.
+Voice metadata: female voice, tense, exhausted daughter seeking honest information
+Voice pipeline timing:
+Trace ID: f5681d34-0027-4201-9518-522488645e19
+Client Events:
+  response_display: 1788194926102.3
+  tts_text_first_usable: 1788194934797.1
+  tts_request_start: 1788194934797.3
+  response_complete: 1788194934800
+  first_tts_audio_data: 1788194936732.7002
+  tts_first_audio_chunk: 1788194936732.7002
+  audio_playback_start: 1788194936732.8
+  client_pipeline_complete: 1788194943620.8
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194914834.5}
+  interrupt_request_start: {"elapsed_ms": 6.6, "epoch_ms": 1788194914841.0}
+  gpt_request_start: {"elapsed_ms": 20.6, "epoch_ms": 1788194914855.0}
+  gpt_first_output: {"elapsed_ms": 7555.1, "epoch_ms": 1788194922389.6}
+  interrupt_request_complete: {"elapsed_ms": 10226.0, "epoch_ms": 1788194925060.5}
+  gpt_completion: {"elapsed_ms": 18904.2, "epoch_ms": 1788194933738.7}
+  tts_text_first_usable: {"elapsed_ms": 18914.1, "epoch_ms": 1788194933748.6}
+  response_generation_complete: {"elapsed_ms": 18914.2, "epoch_ms": 1788194933748.7}
+  response_complete: {"elapsed_ms": 18914.2, "epoch_ms": 1788194933748.7}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194933770.5}
+  tts_first_audio_data: {"elapsed_ms": 1404.9, "epoch_ms": 1788194935175.3}
+  tts_first_audio_chunk: {"elapsed_ms": 1404.9, "epoch_ms": 1788194935175.4}
+  tts_completion: {"elapsed_ms": 2192.0, "epoch_ms": 1788194935962.5}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788194942711.5}
+Durations (ms): {"first_audio_data_to_playback_start": 1557.4, "first_usable_tts_text_to_tts_request": 21.9, "gpt_first_output_to_audio_playback": 14343.2, "gpt_first_output_to_first_usable_tts_text": 11359.0, "gpt_first_output_to_tts_request": 11380.9, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 9872.1, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 1404.9}
+
+[2026-08-31 16:49:17.172710+00:00] Student: yes, do you have any other concerns or questions
+
+[2026-08-31 16:49:38.302095+00:00] Assistant: Understood—the team has specialists, and rehab at this point is mostly passive range of motion and preventing complications. If she does improve, what would that realistically look like?
+Voice metadata: female voice, tense, worried, emotionally tired
+Voice pipeline timing:
+Trace ID: d14fb9d5-4229-4cd4-822c-08a54a63f837
+Client Events:
+  response_display: 1788194966789
+  tts_text_first_usable: 1788194979275.9
+  tts_request_start: 1788194979276.4
+  response_complete: 1788194979357.4
+  first_tts_audio_data: 1788194980970.7
+  tts_first_audio_chunk: 1788194980970.8
+  audio_playback_start: 1788194980970.9
+  client_pipeline_complete: 1788194996038.9
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194957175.4}
+  interrupt_request_start: {"elapsed_ms": 6.0, "epoch_ms": 1788194957181.4}
+  gpt_request_start: {"elapsed_ms": 16.5, "epoch_ms": 1788194957191.9}
+  interrupt_request_complete: {"elapsed_ms": 8177.7, "epoch_ms": 1788194965353.1}
+  gpt_first_output: {"elapsed_ms": 8553.8, "epoch_ms": 1788194965729.2}
+  gpt_completion: {"elapsed_ms": 21120.7, "epoch_ms": 1788194978296.1}
+  tts_text_first_usable: {"elapsed_ms": 21130.0, "epoch_ms": 1788194978305.4}
+  response_generation_complete: {"elapsed_ms": 21130.1, "epoch_ms": 1788194978305.5}
+  response_complete: {"elapsed_ms": 21130.1, "epoch_ms": 1788194978305.5}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788194978329.6}
+  tts_first_audio_data: {"elapsed_ms": 878.0, "epoch_ms": 1788194979207.6}
+  tts_first_audio_chunk: {"elapsed_ms": 878.0, "epoch_ms": 1788194979207.6}
+  tts_completion: {"elapsed_ms": 1888.9, "epoch_ms": 1788194980218.4}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788194995020.9}
+Durations (ms): {"first_audio_data_to_playback_start": 1763.3, "first_usable_tts_text_to_tts_request": 24.2, "gpt_first_output_to_audio_playback": 15241.7, "gpt_first_output_to_first_usable_tts_text": 12576.2, "gpt_first_output_to_tts_request": 12600.4, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 17733.4, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 878.0}
+
+[2026-08-31 16:53:56.126741+00:00] Student: Small improvements. Like eye tracking or purposeful movement
+
+[2026-08-31 16:54:05.591148+00:00] Assistant: That would be hopeful, but how will the team know if eye tracking or purposeful movement is real recognition and not just a reflex?
+Voice metadata: female voice, tense, worried, emotionally tired, direct
+Voice pipeline timing:
+Trace ID: 44c9c875-8fcd-4ce9-83ee-351839779ecd
+Client Events:
+  response_display: 1788195246049.5
+  tts_text_first_usable: 1788195246610.5
+  tts_request_start: 1788195246611
+  response_complete: 1788195246690.7
+  first_tts_audio_data: 1788195248402.2998
+  tts_first_audio_chunk: 1788195248402.2998
+  audio_playback_start: 1788195248402.4
+  client_pipeline_complete: 1788195257378.5999
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195236129.6}
+  interrupt_request_start: {"elapsed_ms": 6.6, "epoch_ms": 1788195236136.2}
+  gpt_request_start: {"elapsed_ms": 20.4, "epoch_ms": 1788195236149.9}
+  interrupt_request_complete: {"elapsed_ms": 7957.3, "epoch_ms": 1788195244086.9}
+  gpt_first_output: {"elapsed_ms": 8885.6, "epoch_ms": 1788195245015.1}
+  gpt_completion: {"elapsed_ms": 9456.1, "epoch_ms": 1788195245585.6}
+  tts_text_first_usable: {"elapsed_ms": 9465.0, "epoch_ms": 1788195245594.6}
+  response_generation_complete: {"elapsed_ms": 9465.1, "epoch_ms": 1788195245594.6}
+  response_complete: {"elapsed_ms": 9465.1, "epoch_ms": 1788195245594.6}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195245691.1}
+  tts_first_audio_data: {"elapsed_ms": 710.9, "epoch_ms": 1788195246402.0}
+  tts_first_audio_chunk: {"elapsed_ms": 710.9, "epoch_ms": 1788195246402.0}
+  tts_completion: {"elapsed_ms": 1885.8, "epoch_ms": 1788195247577.0}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788195256395.3}
+Durations (ms): {"first_audio_data_to_playback_start": 2000.4, "first_usable_tts_text_to_tts_request": 96.5, "gpt_first_output_to_audio_playback": 3387.3, "gpt_first_output_to_first_usable_tts_text": 579.5, "gpt_first_output_to_tts_request": 676.0, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 11784.0, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 710.9}
+
+[2026-08-31 16:54:50.863055+00:00] Student: Sometimes if she responds purposefully. Like if you ask her to move her hand and she does
+
+[2026-08-31 16:55:03.170187+00:00] Assistant: That would be hopeful, but we’d want to know if it’s reliable and meaningful. Have you noticed that she responds to the same command in a consistent way, across sessions?
+Voice metadata: female voice, tense, worried, direct
+Voice pipeline timing:
+Trace ID: 46810d48-be6e-4ce0-b0f7-1e7bdd7b1773
+Client Events:
+  response_display: 1788195304146.5
+  tts_text_first_usable: 1788195304182.6
+  response_complete: 1788195304182.7
+  tts_request_start: 1788195304183.2
+  first_tts_audio_data: 1788195307140
+  tts_first_audio_chunk: 1788195307140
+  audio_playback_start: 1788195307140.1
+  client_pipeline_complete: 1788195320217.4001
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195290866.1}
+  interrupt_request_start: {"elapsed_ms": 6.2, "epoch_ms": 1788195290872.3}
+  gpt_request_start: {"elapsed_ms": 22.8, "epoch_ms": 1788195290888.8}
+  gpt_first_output: {"elapsed_ms": 8425.6, "epoch_ms": 1788195299291.7}
+  interrupt_request_complete: {"elapsed_ms": 12286.5, "epoch_ms": 1788195303152.6}
+  gpt_completion: {"elapsed_ms": 12297.8, "epoch_ms": 1788195303163.8}
+  tts_text_first_usable: {"elapsed_ms": 12307.5, "epoch_ms": 1788195303173.6}
+  response_generation_complete: {"elapsed_ms": 12307.6, "epoch_ms": 1788195303173.7}
+  response_complete: {"elapsed_ms": 12307.6, "epoch_ms": 1788195303173.7}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195303232.6}
+  tts_first_audio_data: {"elapsed_ms": 1554.0, "epoch_ms": 1788195304786.6}
+  tts_first_audio_chunk: {"elapsed_ms": 1554.1, "epoch_ms": 1788195304786.6}
+  tts_completion: {"elapsed_ms": 2604.2, "epoch_ms": 1788195305836.8}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788195319200.9}
+Durations (ms): {"first_audio_data_to_playback_start": 2353.5, "first_usable_tts_text_to_tts_request": 59.0, "gpt_first_output_to_audio_playback": 7848.4, "gpt_first_output_to_first_usable_tts_text": 3881.9, "gpt_first_output_to_tts_request": 3940.9, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 17043.7, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 1554.0}
+
+[2026-08-31 16:56:01.410464+00:00] Student: I'm just meeting her. You can watch for that
+
+[2026-08-31 16:56:18.436274+00:00] Assistant: Okay, I’ll watch for that.
+Voice metadata: female voice, tense, worried, direct
+Voice pipeline timing:
+Trace ID: f39fb021-4676-433c-9089-0a703a161e8f
+Client Events:
+  response_display: 1788195370221.5
+  tts_text_first_usable: 1788195379480.5
+  tts_request_start: 1788195379480.7
+  response_complete: 1788195379515.5
+  first_tts_audio_data: 1788195381162
+  tts_first_audio_chunk: 1788195381162
+  audio_playback_start: 1788195381162
+  client_pipeline_complete: 1788195384557
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195361413.3}
+  interrupt_request_start: {"elapsed_ms": 6.2, "epoch_ms": 1788195361419.5}
+  gpt_request_start: {"elapsed_ms": 23.0, "epoch_ms": 1788195361436.3}
+  gpt_first_output: {"elapsed_ms": 6832.9, "epoch_ms": 1788195368246.3}
+  interrupt_request_complete: {"elapsed_ms": 7828.3, "epoch_ms": 1788195369241.6}
+  gpt_completion: {"elapsed_ms": 17016.6, "epoch_ms": 1788195378429.9}
+  tts_text_first_usable: {"elapsed_ms": 17026.5, "epoch_ms": 1788195378439.8}
+  response_generation_complete: {"elapsed_ms": 17026.5, "epoch_ms": 1788195378439.9}
+  response_complete: {"elapsed_ms": 17026.5, "epoch_ms": 1788195378439.9}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195378458.4}
+  tts_first_audio_data: {"elapsed_ms": 743.7, "epoch_ms": 1788195379202.1}
+  tts_first_audio_chunk: {"elapsed_ms": 743.7, "epoch_ms": 1788195379202.1}
+  tts_completion: {"elapsed_ms": 4623.2, "epoch_ms": 1788195383081.6}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788195383551.7}
+Durations (ms): {"first_audio_data_to_playback_start": 1959.9, "first_usable_tts_text_to_tts_request": 18.6, "gpt_first_output_to_audio_playback": 12915.7, "gpt_first_output_to_first_usable_tts_text": 10193.5, "gpt_first_output_to_tts_request": 10212.1, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 6117.1, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 743.7}
+
+[2026-08-31 16:56:42.568750+00:00] Student: any other questions? I have plenty of time
+
+[2026-08-31 16:56:59.415762+00:00] Assistant: I want to talk to her and be here with her. Do you think she can hear us when we speak, even if she can't respond?
+Voice metadata: female voice, tense, worried, direct
+Voice pipeline timing:
+Trace ID: 6cfb419a-05a8-4c1f-b7b2-39e0af635861
+Client Events:
+  response_display: 1788195419814.5
+  tts_text_first_usable: 1788195420431.2
+  tts_request_start: 1788195420431.6
+  response_complete: 1788195420445.8
+  first_tts_audio_data: 1788195421856.6
+  tts_first_audio_chunk: 1788195421856.6
+  audio_playback_start: 1788195421856.6
+  client_pipeline_complete: 1788195431716.5
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195402571.5}
+  interrupt_request_start: {"elapsed_ms": 6.8, "epoch_ms": 1788195402578.2}
+  gpt_request_start: {"elapsed_ms": 31.0, "epoch_ms": 1788195402602.4}
+  interrupt_request_complete: {"elapsed_ms": 8077.3, "epoch_ms": 1788195410648.7}
+  gpt_first_output: {"elapsed_ms": 16175.6, "epoch_ms": 1788195418747.0}
+  gpt_completion: {"elapsed_ms": 16838.4, "epoch_ms": 1788195419409.8}
+  tts_text_first_usable: {"elapsed_ms": 16848.0, "epoch_ms": 1788195419419.5}
+  response_generation_complete: {"elapsed_ms": 16848.2, "epoch_ms": 1788195419419.6}
+  response_complete: {"elapsed_ms": 16848.2, "epoch_ms": 1788195419419.6}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195419448.8}
+  tts_first_audio_data: {"elapsed_ms": 836.2, "epoch_ms": 1788195420285.1}
+  tts_first_audio_chunk: {"elapsed_ms": 836.3, "epoch_ms": 1788195420285.1}
+  tts_completion: {"elapsed_ms": 1185.7, "epoch_ms": 1788195420634.5}
+  client_report_received: {"elapsed_ms": 0.1, "epoch_ms": 1788195430794.6}
+Durations (ms): {"first_audio_data_to_playback_start": 1571.5, "first_usable_tts_text_to_tts_request": 29.3, "gpt_first_output_to_audio_playback": 3109.6, "gpt_first_output_to_first_usable_tts_text": 672.5, "gpt_first_output_to_tts_request": 701.8, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 12296.9, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 836.3}
+
+[2026-08-31 16:58:43.865410+00:00] Student: I don't know. It doesn't hurt to talk to her. I know you want her to know you care and are here
+
+[2026-08-31 16:59:03.528017+00:00] Assistant: I’m glad you’re here with me. It’s okay to talk to her, even if we don’t know if she hears.
+Voice metadata: female voice, tense, protective, straightforward
+Voice pipeline timing:
+Trace ID: 141c7bd8-fa31-4d78-ab36-a23102a60b6b
+Client Events:
+  response_display: 1788195533754.2002
+  tts_text_first_usable: 1788195544599.5
+  tts_request_start: 1788195544599.8
+  response_complete: 1788195544605.4001
+  first_tts_audio_data: 1788195547276.2002
+  tts_first_audio_chunk: 1788195547276.2002
+  audio_playback_start: 1788195547276.4001
+  client_pipeline_complete: 1788195556674.1
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195523868.0}
+  interrupt_request_start: {"elapsed_ms": 6.8, "epoch_ms": 1788195523874.8}
+  gpt_request_start: {"elapsed_ms": 28.1, "epoch_ms": 1788195523896.1}
+  gpt_first_output: {"elapsed_ms": 8160.9, "epoch_ms": 1788195532028.9}
+  interrupt_request_complete: {"elapsed_ms": 8894.1, "epoch_ms": 1788195532762.1}
+  gpt_completion: {"elapsed_ms": 19652.3, "epoch_ms": 1788195543520.4}
+  tts_text_first_usable: {"elapsed_ms": 19663.3, "epoch_ms": 1788195543531.3}
+  response_generation_complete: {"elapsed_ms": 19663.4, "epoch_ms": 1788195543531.4}
+  response_complete: {"elapsed_ms": 19663.4, "epoch_ms": 1788195543531.4}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195543553.7}
+  tts_first_audio_data: {"elapsed_ms": 1896.0, "epoch_ms": 1788195545449.7}
+  tts_first_audio_chunk: {"elapsed_ms": 1896.0, "epoch_ms": 1788195545449.7}
+  tts_completion: {"elapsed_ms": 2178.6, "epoch_ms": 1788195545732.3}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788195555783.2}
+Durations (ms): {"first_audio_data_to_playback_start": 1826.7, "first_usable_tts_text_to_tts_request": 22.4, "gpt_first_output_to_audio_playback": 15247.5, "gpt_first_output_to_first_usable_tts_text": 11502.4, "gpt_first_output_to_tts_request": 11524.8, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 13142.7, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 1896.0}
+
+[2026-08-31 16:59:22.915551+00:00] Student: yes.
+
+[2026-08-31 16:59:41.156438+00:00] Assistant: Okay, I’ll keep talking to her. If you notice a new sign like consistent purposeful movement or steady eye contact, what would you want me to do first to confirm it and involve the team?
+Voice metadata: female voice, tense, worried, direct but compassionate
+Voice pipeline timing:
+Trace ID: df371202-b5c1-4fa1-8d2f-044dcfd76dd8
+Client Events:
+  response_display: 1788195570717.7
+  tts_text_first_usable: 1788195582155.3
+  tts_request_start: 1788195582155.7
+  response_complete: 1788195582193.4
+  first_tts_audio_data: 1788195585590.8
+  tts_first_audio_chunk: 1788195585590.9
+  audio_playback_start: 1788195585591
+  client_pipeline_complete: 1788195601136.5999
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195562918.1}
+  interrupt_request_start: {"elapsed_ms": 6.6, "epoch_ms": 1788195562924.6}
+  gpt_request_start: {"elapsed_ms": 28.4, "epoch_ms": 1788195562946.4}
+  interrupt_request_complete: {"elapsed_ms": 4102.7, "epoch_ms": 1788195567020.8}
+  gpt_first_output: {"elapsed_ms": 6754.8, "epoch_ms": 1788195569672.9}
+  gpt_completion: {"elapsed_ms": 18230.3, "epoch_ms": 1788195581148.4}
+  tts_text_first_usable: {"elapsed_ms": 18241.8, "epoch_ms": 1788195581159.9}
+  response_generation_complete: {"elapsed_ms": 18242.0, "epoch_ms": 1788195581160.0}
+  response_complete: {"elapsed_ms": 18242.0, "epoch_ms": 1788195581160.0}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195581186.1}
+  tts_first_audio_data: {"elapsed_ms": 2664.7, "epoch_ms": 1788195583850.8}
+  tts_first_audio_chunk: {"elapsed_ms": 2664.7, "epoch_ms": 1788195583850.8}
+  tts_completion: {"elapsed_ms": 2943.8, "epoch_ms": 1788195584129.9}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788195600240.5}
+Durations (ms): {"first_audio_data_to_playback_start": 1740.2, "first_usable_tts_text_to_tts_request": 26.2, "gpt_first_output_to_audio_playback": 15918.1, "gpt_first_output_to_first_usable_tts_text": 11487.0, "gpt_first_output_to_tts_request": 11513.2, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 19976.6, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 2664.7}
+
+[2026-08-31 17:00:38.569182+00:00] Student: You can note it. We'll come regularly. Perhaps that would be a sign for increase rehab.
+
+[2026-08-31 17:01:02.429727+00:00] Assistant: Okay, I’ll note it and keep regular visits.
+Voice metadata: female voice, tense, protective, hopeful but wary
+Voice pipeline timing:
+Trace ID: 0f5d079c-6296-40fe-8a54-5980383980b5
+Client Events:
+  response_display: 1788195648512.2998
+  tts_text_first_usable: 1788195663425.4
+  tts_request_start: 1788195663425.9
+  response_complete: 1788195663437.9
+  first_tts_audio_data: 1788195665237.7
+  tts_first_audio_chunk: 1788195665237.7
+  audio_playback_start: 1788195665237.7
+  client_pipeline_complete: 1788195670234.9
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195638572.2}
+  interrupt_request_start: {"elapsed_ms": 7.8, "epoch_ms": 1788195638580.0}
+  gpt_request_start: {"elapsed_ms": 32.3, "epoch_ms": 1788195638604.4}
+  gpt_first_output: {"elapsed_ms": 4921.8, "epoch_ms": 1788195643494.0}
+  interrupt_request_complete: {"elapsed_ms": 8953.0, "epoch_ms": 1788195647525.2}
+  gpt_completion: {"elapsed_ms": 23849.0, "epoch_ms": 1788195662421.2}
+  tts_text_first_usable: {"elapsed_ms": 23860.9, "epoch_ms": 1788195662433.0}
+  response_generation_complete: {"elapsed_ms": 23861.0, "epoch_ms": 1788195662433.2}
+  response_complete: {"elapsed_ms": 23861.0, "epoch_ms": 1788195662433.2}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195662464.4}
+  tts_first_audio_data: {"elapsed_ms": 1072.4, "epoch_ms": 1788195663536.8}
+  tts_first_audio_chunk: {"elapsed_ms": 1072.4, "epoch_ms": 1788195663536.8}
+  tts_completion: {"elapsed_ms": 1267.4, "epoch_ms": 1788195663731.8}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788195669261.4}
+Durations (ms): {"first_audio_data_to_playback_start": 1700.9, "first_usable_tts_text_to_tts_request": 31.4, "gpt_first_output_to_audio_playback": 21743.7, "gpt_first_output_to_first_usable_tts_text": 18939.0, "gpt_first_output_to_tts_request": 18970.4, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 7801.7, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 1072.4}
+
+[2026-08-31 17:01:18.284951+00:00] Student: Ok. Any other questions?
+
+[2026-08-31 17:01:38.733070+00:00] Assistant: Yes. I still have questions. If she never wakes up, how long could she live with the trach and PEG?
+Voice metadata: female voice, tense, tired, worried
+Voice pipeline timing:
+Trace ID: 89f392a2-b10e-49b9-ae08-37804c3c4bb4
+Client Events:
+  response_display: 1788195687754
+  tts_text_first_usable: 1788195699756.8
+  tts_request_start: 1788195699757.3
+  response_complete: 1788195699834.3
+  first_tts_audio_data: 1788195701131.7
+  tts_first_audio_chunk: 1788195701131.7
+  audio_playback_start: 1788195701131.8
+  client_pipeline_complete: 1788195714114
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195678287.5}
+  interrupt_request_start: {"elapsed_ms": 9.4, "epoch_ms": 1788195678296.9}
+  gpt_request_start: {"elapsed_ms": 34.7, "epoch_ms": 1788195678322.3}
+  interrupt_request_complete: {"elapsed_ms": 3707.3, "epoch_ms": 1788195681994.9}
+  gpt_first_output: {"elapsed_ms": 8501.5, "epoch_ms": 1788195686789.0}
+  gpt_completion: {"elapsed_ms": 9194.8, "epoch_ms": 1788195687482.3}
+  tts_text_first_usable: {"elapsed_ms": 20449.3, "epoch_ms": 1788195698736.8}
+  response_generation_complete: {"elapsed_ms": 20449.5, "epoch_ms": 1788195698737.0}
+  response_complete: {"elapsed_ms": 20449.5, "epoch_ms": 1788195698737.0}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195698763.6}
+  tts_first_audio_data: {"elapsed_ms": 1239.7, "epoch_ms": 1788195700003.3}
+  tts_first_audio_chunk: {"elapsed_ms": 1239.7, "epoch_ms": 1788195700003.3}
+  tts_completion: {"elapsed_ms": 1251.2, "epoch_ms": 1788195700014.9}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788195713215.9}
+Durations (ms): {"first_audio_data_to_playback_start": 1128.5, "first_usable_tts_text_to_tts_request": 26.8, "gpt_first_output_to_audio_playback": 14342.8, "gpt_first_output_to_first_usable_tts_text": 11947.8, "gpt_first_output_to_tts_request": 11974.6, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 15377.0, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 1239.7}
+
+[2026-08-31 17:02:15.319530+00:00] Student: I could be years.
+
+[2026-08-31 17:02:31.555230+00:00] Assistant: That could be years, and that's really hard to hear. Would you want us to involve palliative care to help with comfort and daily care planning if her trajectory stays non-recovering?
+Voice metadata: female voice, tense, exhausted, gently pragmatic
+Voice pipeline timing:
+Trace ID: 1a89734b-0cb1-4042-a886-348534731dbd
+Client Events:
+  response_display: 1788195745074.2
+  tts_text_first_usable: 1788195752513.8
+  tts_request_start: 1788195752514.3
+  response_complete: 1788195752547.5999
+  first_tts_audio_data: 1788195754395
+  tts_first_audio_chunk: 1788195754395
+  audio_playback_start: 1788195754395.2
+  client_pipeline_complete: 1788195769714.8
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195735322.4}
+  interrupt_request_start: {"elapsed_ms": 8.4, "epoch_ms": 1788195735330.7}
+  gpt_request_start: {"elapsed_ms": 35.6, "epoch_ms": 1788195735358.0}
+  interrupt_request_complete: {"elapsed_ms": 6456.7, "epoch_ms": 1788195741779.0}
+  gpt_first_output: {"elapsed_ms": 8751.0, "epoch_ms": 1788195744073.3}
+  gpt_completion: {"elapsed_ms": 9336.2, "epoch_ms": 1788195744658.6}
+  tts_text_first_usable: {"elapsed_ms": 16236.4, "epoch_ms": 1788195751558.7}
+  response_generation_complete: {"elapsed_ms": 16236.5, "epoch_ms": 1788195751558.8}
+  response_complete: {"elapsed_ms": 16236.5, "epoch_ms": 1788195751558.8}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195751587.4}
+  tts_first_audio_data: {"elapsed_ms": 1116.4, "epoch_ms": 1788195752703.8}
+  tts_first_audio_chunk: {"elapsed_ms": 1116.4, "epoch_ms": 1788195752703.8}
+  tts_completion: {"elapsed_ms": 1332.3, "epoch_ms": 1788195752919.7}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788195768715.4}
+Durations (ms): {"first_audio_data_to_playback_start": 1691.4, "first_usable_tts_text_to_tts_request": 28.7, "gpt_first_output_to_audio_playback": 10321.9, "gpt_first_output_to_first_usable_tts_text": 7485.4, "gpt_first_output_to_tts_request": 7514.1, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 18156.0, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 1116.4}
+
+[2026-08-31 17:03:16.247059+00:00] Student: I think that would be a good idea. Palliative care is always good to be involved.
+
+[2026-08-31 17:03:33.891973+00:00] Assistant: Thank you. I think that would be helpful. How would we bring palliative care in, and what would the first steps and goals be for mom and for us?
+Voice metadata: female voice, tense, worried, emotionally tired, direct but not hostile
+Voice pipeline timing:
+Trace ID: 42ecd6d7-abd0-413e-8926-4826af4fcc0a
+Client Events:
+  response_display: 1788195805800.0999
+  tts_text_first_usable: 1788195814854.3
+  response_complete: 1788195814854.4
+  tts_request_start: 1788195814855.2
+  first_tts_audio_data: 1788195816826.0999
+  tts_first_audio_chunk: 1788195816826.0999
+  audio_playback_start: 1788195816826.2
+  client_pipeline_complete: 1788195832873.2
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195796250.1}
+  interrupt_request_start: {"elapsed_ms": 8.0, "epoch_ms": 1788195796258.0}
+  gpt_request_start: {"elapsed_ms": 40.0, "epoch_ms": 1788195796290.1}
+  gpt_first_output: {"elapsed_ms": 5796.7, "epoch_ms": 1788195802046.7}
+  interrupt_request_complete: {"elapsed_ms": 8513.9, "epoch_ms": 1788195804764.0}
+  gpt_completion: {"elapsed_ms": 8526.2, "epoch_ms": 1788195804776.2}
+  tts_text_first_usable: {"elapsed_ms": 17645.4, "epoch_ms": 1788195813895.5}
+  response_generation_complete: {"elapsed_ms": 17645.6, "epoch_ms": 1788195813895.6}
+  response_complete: {"elapsed_ms": 17645.6, "epoch_ms": 1788195813895.6}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195813926.0}
+  tts_first_audio_data: {"elapsed_ms": 1577.4, "epoch_ms": 1788195815503.3}
+  tts_first_audio_chunk: {"elapsed_ms": 1577.4, "epoch_ms": 1788195815503.3}
+  tts_completion: {"elapsed_ms": 1854.8, "epoch_ms": 1788195815780.8}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788195831873.6}
+Durations (ms): {"first_audio_data_to_playback_start": 1322.9, "first_usable_tts_text_to_tts_request": 30.5, "gpt_first_output_to_audio_playback": 14779.5, "gpt_first_output_to_first_usable_tts_text": 11848.8, "gpt_first_output_to_tts_request": 11879.3, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 18977.6, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 1577.3}
+
+[2026-08-31 17:04:30.083492+00:00] Student: I can talk to your doctor and they'll do a consult. the first steps would be to decide your goals and discuss what your mother would want too.
+
+[2026-08-31 17:04:56.343783+00:00] Assistant: That sounds like a solid plan.
+Voice metadata: female voice, tense, worried, emotionally tired, direct but caring
+Voice pipeline timing:
+Trace ID: d9b11e44-264b-42fa-b711-8548dc5cbf9f
+Client Events:
+  response_display: 1788195881306.5
+  tts_text_first_usable: 1788195897394.7002
+  tts_request_start: 1788195897395
+  response_complete: 1788195897480.5
+  first_tts_audio_data: 1788195899359.3
+  tts_first_audio_chunk: 1788195899359.3
+  audio_playback_start: 1788195899359.4001
+  client_pipeline_complete: 1788195902773.8
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195870086.8}
+  interrupt_request_start: {"elapsed_ms": 7.2, "epoch_ms": 1788195870093.9}
+  gpt_request_start: {"elapsed_ms": 43.1, "epoch_ms": 1788195870129.9}
+  gpt_first_output: {"elapsed_ms": 7494.5, "epoch_ms": 1788195877581.3}
+  interrupt_request_complete: {"elapsed_ms": 10263.7, "epoch_ms": 1788195880350.5}
+  gpt_completion: {"elapsed_ms": 18931.9, "epoch_ms": 1788195889018.7}
+  tts_text_first_usable: {"elapsed_ms": 26260.6, "epoch_ms": 1788195896347.3}
+  response_generation_complete: {"elapsed_ms": 26260.7, "epoch_ms": 1788195896347.5}
+  response_complete: {"elapsed_ms": 26260.7, "epoch_ms": 1788195896347.5}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195896378.0}
+  tts_first_audio_data: {"elapsed_ms": 1231.8, "epoch_ms": 1788195897609.8}
+  tts_first_audio_chunk: {"elapsed_ms": 1231.8, "epoch_ms": 1788195897609.8}
+  tts_completion: {"elapsed_ms": 1249.9, "epoch_ms": 1788195897627.9}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788195901817.7}
+Durations (ms): {"first_audio_data_to_playback_start": 1749.6, "first_usable_tts_text_to_tts_request": 30.7, "gpt_first_output_to_audio_playback": 21778.1, "gpt_first_output_to_first_usable_tts_text": 18766.0, "gpt_first_output_to_tts_request": 18796.7, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 6426.3, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 1231.8}
+
+[2026-08-31 17:05:21.830302+00:00] Student: Ok. any other questions?
+
+[2026-08-31 17:05:48.322967+00:00] Assistant: Okay, I understand. I'll keep that in mind.
+Voice metadata: female voice, tense, exhausted but direct
+Voice pipeline timing:
+Trace ID: ad18032c-6539-45c3-bf4f-05b73c440532
+Client Events:
+  response_display: 1788195929333.5999
+  tts_text_first_usable: 1788195949291.7998
+  tts_request_start: 1788195949292.2998
+  response_complete: 1788195949377.5
+  first_tts_audio_data: 1788195950906.4
+  tts_first_audio_chunk: 1788195950906.4
+  audio_playback_start: 1788195950906.5
+  client_pipeline_complete: 1788195956592.5
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195921833.2}
+  interrupt_request_start: {"elapsed_ms": 7.9, "epoch_ms": 1788195921841.0}
+  gpt_request_start: {"elapsed_ms": 41.6, "epoch_ms": 1788195921874.7}
+  interrupt_request_complete: {"elapsed_ms": 5866.9, "epoch_ms": 1788195927700.0}
+  gpt_first_output: {"elapsed_ms": 6445.7, "epoch_ms": 1788195928278.8}
+  gpt_completion: {"elapsed_ms": 17420.5, "epoch_ms": 1788195939253.7}
+  tts_text_first_usable: {"elapsed_ms": 26493.5, "epoch_ms": 1788195948326.6}
+  response_generation_complete: {"elapsed_ms": 26493.6, "epoch_ms": 1788195948326.7}
+  response_complete: {"elapsed_ms": 26493.6, "epoch_ms": 1788195948326.7}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195948353.4}
+  tts_first_audio_data: {"elapsed_ms": 954.6, "epoch_ms": 1788195949308.1}
+  tts_first_audio_chunk: {"elapsed_ms": 954.6, "epoch_ms": 1788195949308.1}
+  tts_completion: {"elapsed_ms": 972.0, "epoch_ms": 1788195949325.4}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788195955630.6}
+Durations (ms): {"first_audio_data_to_playback_start": 1598.4, "first_usable_tts_text_to_tts_request": 26.8, "gpt_first_output_to_audio_playback": 22627.7, "gpt_first_output_to_first_usable_tts_text": 20047.8, "gpt_first_output_to_tts_request": 20074.6, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 8265.8, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 954.7}
+
+[2026-08-31 17:06:08.580506+00:00] Student: any other questions
+
+[2026-08-31 17:06:24.921503+00:00] Assistant: Okay, one more question: if there aren’t any new signs of wakefulness in the next couple of weeks, what is the best way to discuss goals of care with the team and with us as a family?
+Voice metadata: female voice, tense, worried, emotionally tired; direct but open
+Voice pipeline timing:
+Trace ID: 2da992c1-0a95-40e2-83d9-9148f7b229f3
+Client Events:
+  response_display: 1788195979179.4001
+  tts_text_first_usable: 1788195985910.4001
+  tts_request_start: 1788195985910.7002
+  response_complete: 1788195985949.7002
+  first_tts_audio_data: 1788195987331
+  tts_first_audio_chunk: 1788195987331
+  audio_playback_start: 1788195987331.1
+  client_pipeline_complete: 1788195999633
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195968583.2}
+  interrupt_request_start: {"elapsed_ms": 8.1, "epoch_ms": 1788195968591.3}
+  gpt_request_start: {"elapsed_ms": 42.4, "epoch_ms": 1788195968625.6}
+  interrupt_request_complete: {"elapsed_ms": 6447.8, "epoch_ms": 1788195975031.0}
+  gpt_first_output: {"elapsed_ms": 9641.2, "epoch_ms": 1788195978224.3}
+  gpt_completion: {"elapsed_ms": 10430.9, "epoch_ms": 1788195979014.1}
+  tts_text_first_usable: {"elapsed_ms": 16342.1, "epoch_ms": 1788195984925.3}
+  response_generation_complete: {"elapsed_ms": 16342.2, "epoch_ms": 1788195984925.4}
+  response_complete: {"elapsed_ms": 16342.2, "epoch_ms": 1788195984925.4}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788195984950.7}
+  tts_first_audio_data: {"elapsed_ms": 1114.9, "epoch_ms": 1788195986065.6}
+  tts_first_audio_chunk: {"elapsed_ms": 1114.9, "epoch_ms": 1788195986065.6}
+  tts_completion: {"elapsed_ms": 2427.1, "epoch_ms": 1788195987377.7}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788195998679.6}
+Durations (ms): {"first_audio_data_to_playback_start": 1265.5, "first_usable_tts_text_to_tts_request": 25.4, "gpt_first_output_to_audio_playback": 9106.8, "gpt_first_output_to_first_usable_tts_text": 6701.0, "gpt_first_output_to_tts_request": 6726.4, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 14707.6, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 1114.9}
+
+[2026-08-31 17:07:17.636750+00:00] Student: You can just let us know that you want a meeting. The doctor and your family and the palliative care team can get together.
+
+[2026-08-31 17:07:36.846547+00:00] Assistant: Okay, I’ll arrange that. Who should be at the meeting from your family?
+Voice metadata: female voice, tense, worried, direct
+Voice pipeline timing:
+Trace ID: b8399906-245b-47b4-bf32-293de04053e7
+Client Events:
+  response_display: 1788196049970.7998
+  tts_text_first_usable: 1788196057887.5
+  tts_request_start: 1788196057887.7998
+  response_complete: 1788196057923.0999
+  first_tts_audio_data: 1788196059902.7998
+  tts_first_audio_chunk: 1788196059902.7998
+  audio_playback_start: 1788196059902.9
+  client_pipeline_complete: 1788196067677.2
+Server Events:
+  server_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788196037639.5}
+  interrupt_request_start: {"elapsed_ms": 7.0, "epoch_ms": 1788196037646.4}
+  gpt_request_start: {"elapsed_ms": 47.2, "epoch_ms": 1788196037686.7}
+  interrupt_request_complete: {"elapsed_ms": 8804.8, "epoch_ms": 1788196046444.3}
+  gpt_first_output: {"elapsed_ms": 11330.3, "epoch_ms": 1788196048969.8}
+  gpt_completion: {"elapsed_ms": 12063.7, "epoch_ms": 1788196049703.2}
+  tts_text_first_usable: {"elapsed_ms": 19210.7, "epoch_ms": 1788196056850.2}
+  response_generation_complete: {"elapsed_ms": 19210.8, "epoch_ms": 1788196056850.3}
+  response_complete: {"elapsed_ms": 19210.8, "epoch_ms": 1788196056850.3}
+  tts_request_start: {"elapsed_ms": 0.0, "epoch_ms": 1788196056872.0}
+  tts_first_audio_data: {"elapsed_ms": 1257.3, "epoch_ms": 1788196058129.3}
+  tts_first_audio_chunk: {"elapsed_ms": 1257.3, "epoch_ms": 1788196058129.3}
+  tts_completion: {"elapsed_ms": 1444.0, "epoch_ms": 1788196058316.0}
+  client_report_received: {"elapsed_ms": 0.0, "epoch_ms": 1788196066767.6}
+Durations (ms): {"first_audio_data_to_playback_start": 1773.6, "first_usable_tts_text_to_tts_request": 21.8, "gpt_first_output_to_audio_playback": 10933.1, "gpt_first_output_to_first_usable_tts_text": 7880.4, "gpt_first_output_to_tts_request": 7902.2, "recording_end_to_first_audible_response": null, "recording_end_to_first_visible_response": null, "recording_end_to_stt_completion": null, "response_generation_to_client_pipeline_complete": 10826.9, "stt_completion_to_gpt_first_output": null, "stt_completion_to_gpt_request_start": null, "stt_start_to_stt_completion": null, "tts_request_to_first_audio_data": 1257.3}

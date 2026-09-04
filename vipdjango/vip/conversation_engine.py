@@ -1,8 +1,8 @@
 import json
 import logging
+import math
 import re
 import threading
-from concurrent.futures import ThreadPoolExecutor
 from difflib import SequenceMatcher
 
 from .conversation_graph import MAX_TURNS, TARGET_TURNS, build_conversation_graph
@@ -65,6 +65,7 @@ _ENDING_NEGATIVE_PHRASES = (
     "can't learn this",
     "cannot learn this",
 )
+_HISTORY_LABEL_RE = re.compile(r"^\s*(?:LEARNER|SIMULATED CHARACTER):\s*", flags=re.IGNORECASE)
 
 
 def split_dialogue_and_voice(text):
@@ -84,8 +85,34 @@ def split_dialogue_and_voice(text):
     return dialogue, match.group(1).strip()
 
 
-def _history(messages):
-    """Convert the complete persisted transcript to native LLM roles."""
+def format_history_content(role, content):
+    """Add a simulation-speaker label without changing the native API role."""
+    value = (content or "").strip()
+    if _HISTORY_LABEL_RE.match(value):
+        return value
+    label = "LEARNER" if role == "user" else "SIMULATED CHARACTER"
+    return f"{label}:\n{value}"
+
+
+def _without_history_label(text):
+    return _HISTORY_LABEL_RE.sub("", (text or "").strip(), count=1)
+
+
+def _history(messages, scenario=None):
+    """Convert spoken transcript to native LLM roles with clear speaker labels.
+
+    The application-owned Introduction is already represented by the active
+    scenario and is not dialogue. Omitting it avoids sending the same setup
+    instructions on every later turn while retaining all spoken history.
+    """
+    introduction = ""
+    if scenario is not None:
+        introduction = (
+            scenario.get("introduction", "")
+            if isinstance(scenario, dict)
+            else getattr(scenario, "introduction", "")
+        ).strip()
+    introduction_skipped = False
     result = []
     for message in messages:
         sender = str(message.sender)
@@ -94,10 +121,11 @@ def _history(messages):
         content = (message.content or "").strip()
         if sender == "assistant":
             content, _ = split_dialogue_and_voice(content)
-        result.append({
-            "role": "user" if sender == "student" else "assistant",
-            "content": content,
-        })
+            if introduction and not introduction_skipped and content == introduction:
+                introduction_skipped = True
+                continue
+        role = "user" if sender == "student" else "assistant"
+        result.append({"role": role, "content": format_history_content(role, content)})
     return result
 
 
@@ -122,6 +150,7 @@ def format_voice_metadata(metadata):
 
 def _question_parts(text):
     """Return spoken questions, without treating the whole transcript as a topic."""
+    text = _without_history_label(text)
     return [
         part.strip()
         for part in re.split(r"(?<=\?)\s+", text or "")
@@ -132,7 +161,7 @@ def _question_parts(text):
 def _question_tokens(text):
     return {
         token
-        for token in _WORD_RE.findall((text or "").lower())
+        for token in _WORD_RE.findall(_without_history_label(text).lower())
         if token not in _QUESTION_STOP_WORDS and len(token) > 2
     }
 
@@ -207,6 +236,136 @@ def _conversation_memory(history):
     return "\n".join(lines)
 
 
+def _scenario_objectives(scenario):
+    """Return valid scenario objective records without trusting model output."""
+    records = []
+    for objective in (scenario or {}).get("objectives", []) or []:
+        if not isinstance(objective, dict):
+            continue
+        objective_id = str(objective.get("id", "")).strip()
+        if objective_id:
+            records.append(
+                {
+                    "id": objective_id,
+                    "description": str(objective.get("description", "")).strip(),
+                    "possible_expressions": str(objective.get("possible_expressions", "")).strip(),
+                    "resolved_when": str(objective.get("resolved_when", "")).strip(),
+                }
+            )
+    return records
+
+
+def _valid_objective_values(values, valid_ids):
+    if isinstance(values, str):
+        values = [values]
+    if not isinstance(values, (list, tuple)):
+        return []
+    return [value for value in values if isinstance(value, str) and value in valid_ids]
+
+
+def _initial_objective_progress(scenario, state):
+    objective_ids = [objective["id"] for objective in _scenario_objectives(scenario)]
+    valid_ids = set(objective_ids)
+    covered = list(dict.fromkeys(_valid_objective_values(state.get("covered_objectives"), valid_ids)))
+    unresolved = list(dict.fromkeys(_valid_objective_values(state.get("unresolved_objectives"), valid_ids)))
+    if objective_ids and not covered and not unresolved:
+        unresolved = list(objective_ids)
+    unresolved = [value for value in unresolved if value not in covered]
+    active = state.get("active_objective", "")
+    if active not in unresolved:
+        active = unresolved[0] if unresolved else ""
+    return {
+        "active_objective": active,
+        "covered_objectives": covered,
+        "unresolved_objectives": unresolved,
+        "ending_ready": bool(state.get("ending_ready", False)),
+    }
+
+
+def _recent_topics(history, previous=None):
+    """Keep a small, generic topic trail without replacing the full transcript."""
+    topics = []
+    seen = set()
+    for message in reversed(history or []):
+        if message.get("role") != "user":
+            continue
+        content = _without_history_label(message.get("content", ""))
+        values = _question_parts(content) or [content]
+        for value in values:
+            value = " ".join(value.split()).strip()
+            if not value:
+                continue
+            key = value.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            topics.append(value[:220])
+            if len(topics) >= 6:
+                return list(reversed(topics))
+    if topics:
+        return list(reversed(topics))
+    return list(previous or [])[-6:]
+
+
+def _objective_progress_context(scenario, state):
+    objectives = _scenario_objectives(scenario)
+    if not objectives:
+        return "No scenario-defined conversation objectives are configured. Follow the scenario behavior and do not invent educational objectives."
+    progress = _initial_objective_progress(scenario, state)
+
+    lines = [
+        "Objectives describe underlying concerns, not a rigid checklist or required question sequence.",
+        "Objective records are internal progress labels. Possible expressions are examples of concerns the Simulated Character may express when the Learner's latest response leaves them unresolved. They are not questions for the Learner's role, not a facilitator script, and not required wording. Judge the learner's meaning. One learner response may cover multiple objectives, and an objective may be covered without its example question being spoken.",
+    ]
+    for objective in objectives:
+        lines.append(f"- {objective['id']}: {objective['description']}")
+        if objective["possible_expressions"]:
+            lines.append(f"  Possible expressions: {objective['possible_expressions']}")
+        if objective["resolved_when"]:
+            lines.append(f"  Resolved when: {objective['resolved_when']}")
+    lines.extend(
+        [
+            f"Active objective: {progress['active_objective'] or 'none selected'}",
+            f"Covered objectives: {', '.join(progress['covered_objectives']) or 'none'}",
+            f"Unresolved objectives: {', '.join(progress['unresolved_objectives']) or 'none'}",
+            f"Recent learner topics/questions: {' | '.join(state.get('recent_topics', [])) or 'none recorded'}",
+            "Treat the progress fields as lightweight guidance. Acknowledge the learner naturally, do not force every objective, and do not ask every possible question.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _normalize_objective_progress(scenario, state, result, history):
+    """Validate one model progress snapshot and keep progress monotonic."""
+    previous = _initial_objective_progress(scenario, state)
+    valid_ids = {objective["id"] for objective in _scenario_objectives(scenario)}
+    covered = list(previous["covered_objectives"])
+    if "covered_objectives" in result:
+        covered.extend(_valid_objective_values(result.get("covered_objectives"), valid_ids))
+    covered = list(dict.fromkeys(covered))
+
+    unresolved = list(previous["unresolved_objectives"])
+    if "unresolved_objectives" in result:
+        unresolved.extend(_valid_objective_values(result.get("unresolved_objectives"), valid_ids))
+    unresolved = [value for value in dict.fromkeys(unresolved) if value not in covered]
+
+    active = result.get("active_objective", previous["active_objective"])
+    if active not in unresolved:
+        active = unresolved[0] if unresolved else ""
+    ending_ready = (
+        bool(result["ending_ready"])
+        if "ending_ready" in result
+        else previous["ending_ready"]
+    )
+    return {
+        "active_objective": active,
+        "covered_objectives": covered,
+        "unresolved_objectives": unresolved,
+        "recent_topics": _recent_topics(history, state.get("recent_topics")),
+        "ending_ready": ending_ready,
+    }
+
+
 def _repeated_answered_question(dialogue, history):
     answered = _answered_questions(history)
     for question in _question_parts(dialogue):
@@ -239,36 +398,67 @@ def _looks_like_ending_candidate(dialogue, latest_learner=""):
     return any(marker in text for marker in _ENDING_SIGNAL_PHRASES)
 
 
-def _partial_json_field(text, field):
-    """Read a JSON string field while a structured response is still streaming."""
-    match = re.search(r'"' + re.escape(field) + r'"\s*:\s*"', text or "")
-    if not match:
-        return "", False
+def _context_measurement(payload, request_kind):
+    """Measure the exact input payload shape without retaining its contents."""
+    serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    content_chars = sum(
+        len(message.get("content", ""))
+        for message in payload
+        if isinstance(message, dict) and isinstance(message.get("content", ""), str)
+    )
+    content_bytes = sum(
+        len(message.get("content", "").encode("utf-8"))
+        for message in payload
+        if isinstance(message, dict) and isinstance(message.get("content", ""), str)
+    )
+    serialized_bytes = len(serialized.encode("utf-8"))
+    return {
+        "request_kind": request_kind,
+        "message_count": len(payload),
+        "content_chars": content_chars,
+        "content_bytes": content_bytes,
+        "serialized_chars": len(serialized),
+        "serialized_bytes": serialized_bytes,
+        # This is deliberately labeled as an estimate. Provider tokenization
+        # is reported below when the API returns usage data.
+        "estimated_tokens": math.ceil(serialized_bytes / 4),
+        "input_tokens": None,
+        "output_tokens": None,
+        "total_tokens": None,
+    }
 
-    start = match.end()
-    raw = []
-    escaped = False
-    for char in text[start:]:
-        if escaped:
-            raw.append(char)
-            escaped = False
-        elif char == "\\":
-            raw.append(char)
-            escaped = True
-        elif char == '"':
-            return json.loads('"' + "".join(raw) + '"'), True
-        else:
-            raw.append(char)
 
-    fragment = "".join(raw)
-    # A delta can end in the middle of an escape sequence. Decode the longest
-    # safe prefix and let the next delta supply the remainder.
-    for end in range(len(fragment), -1, -1):
-        try:
-            return json.loads('"' + fragment[:end] + '"'), False
-        except json.JSONDecodeError:
-            continue
-    return "", False
+def _usage_value(usage, name):
+    if usage is None:
+        return None
+    if isinstance(usage, dict):
+        value = usage.get(name)
+    else:
+        value = getattr(usage, name, None)
+    return value if isinstance(value, int) else None
+
+
+def _add_context_measurement(context_measurements, payload, request_kind):
+    if not isinstance(context_measurements, list):
+        return None
+    measurement = _context_measurement(payload, request_kind)
+    context_measurements.append(measurement)
+    return measurement
+
+
+def _attach_response_usage(measurement, response):
+    if not measurement:
+        return
+    usage = getattr(response, "usage", None)
+    for name in ("input_tokens", "output_tokens", "total_tokens"):
+        value = _usage_value(usage, name)
+        if value is not None:
+            measurement[name] = value
+
+
+def _log_context_measurement(measurement):
+    if measurement:
+        logger.info("llm_context %s", json.dumps(measurement, ensure_ascii=False, sort_keys=True))
 
 
 class ConversationEngine:
@@ -276,23 +466,40 @@ class ConversationEngine:
         self.global_prompt = global_prompt.strip()
         self.api_key = api_key
         self.model = model
+        self._client = None
+        self._client_lock = threading.Lock()
         self.graph = build_conversation_graph(self._llm_turn)
 
-    def _interrupt(self, message, timing_callback=None):
-        from openai import OpenAI
+    def _openai_client(self):
+        """Reuse one HTTP client across requests made during this turn."""
+        if self._client is None:
+            with self._client_lock:
+                if self._client is None:
+                    from openai import OpenAI
 
+                    self._client = OpenAI(api_key=self.api_key)
+        return self._client
+
+    def _interrupt(self, message, timing_callback=None, context_measurements=None):
         payload = [
             {"role": "system", "content": "Return true only when the learner clearly asks to stop or end the conversation now. Return false for ordinary roleplay, thanks with a question, or discussion of an ending."},
             {"role": "user", "content": message},
         ]
-        logger.debug("Interrupt payload: %s", json.dumps(payload, ensure_ascii=False, indent=2))
+        measurement = _add_context_measurement(context_measurements, payload, "interrupt")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Interrupt payload: %s",
+                json.dumps(payload, ensure_ascii=False, indent=2),
+            )
         if timing_callback:
             timing_callback("interrupt_request_start")
-        response = OpenAI(api_key=self.api_key).responses.create(
+        response = self._openai_client().responses.create(
             model=self.model,
             text={"format": {"type": "json_schema", "name": "interrupt", "schema": {"type": "object", "properties": {"stop_requested": {"type": "boolean"}}, "required": ["stop_requested"], "additionalProperties": False}, "strict": True}},
             input=payload,
         )
+        _attach_response_usage(measurement, response)
+        _log_context_measurement(measurement)
         if timing_callback:
             timing_callback("interrupt_request_complete")
         return bool(json.loads(response.output_text or "{}").get("stop_requested"))
@@ -305,30 +512,29 @@ class ConversationEngine:
             "middle": scenario["middle_to_ending_cues"],
             "ending": scenario["end_of_conversation_cues"],
         }[stage]
+        background_context = (scenario.get("background_context") or "").strip()
+        scenario_context = (
+            "SCENARIO REFERENCE DATA (parsed from the role prompt; not dialogue or a second set of speaker instructions):\n"
+            f"Background and context: {background_context or 'No additional background context is provided.'}\n"
+            "Scenario reference data and author notes are internal simulation data, not automatic character knowledge or dialogue. Use facts only when the Simulated Character would reasonably know them and they are relevant to the Learner's latest turn or the character's own concern. Do not recite scenario facts or introduce clinical information unprompted.\n\n"
+        )
         return (
             f"{self.global_prompt}\n\n"
-            "SPEAKER CONTRACT (highest priority):\n"
-            "- You are the assistant, and you are always the scenario character.\n"
-            "- The user messages are the learner's actual words. The user is never you.\n"
-            "- Never play, quote as new dialogue, or narrate the learner's identity, actions, thoughts, feelings, or professional decisions.\n"
-            "- You may describe only what your character says, thinks, feels, knows, notices, or does.\n"
-            "- Do not teach, coach, evaluate, or optimize the learner; if the character asks for information, ask as the character and wait for the learner's answer.\n"
-            "- Treat information supplied by the learner as information from the learner; do not silently convert it into your character's knowledge or action.\n"
-            "- Never invent learner actions, thoughts, feelings, dialogue, or identity. If the learner has not said or done something, it has not happened.\n\n"
-            "IMMUTABLE SCENARIO IDENTITY:\n"
-            f"ASSISTANT CHARACTER (## Role):\n{scenario['character']}\n\n"
-            f"LEARNER / USER (## Learner Role):\n{scenario['learner']}\n\n"
-            "The assistant is the character; the user is the learner. These labels never change during the conversation.\n\n"
-            "SCENARIO STAGE GUIDANCE:\n"
-            f"Beginning:\n{scenario['beginning']}\n\n"
-            f"Middle:\n{scenario['middle']}\n\n"
-            f"Ending:\n{scenario['ending']}\n\n"
+            f"{scenario_context}"
+            "PARTICIPANT OWNERSHIP (immutable):\n"
+            f"SIMULATED CHARACTER / ASSISTANT CHARACTER (## Role): {scenario['character']}\n"
+            f"LEARNER / USER (## Learner Role): {scenario['learner']}\n"
+            "You are the Simulated Character and generate dialogue only for that character. The human-controlled participant is the Learner. The Learner drives the encounter; respond to what the Learner actually says. Do not turn scenario topics into a questionnaire for the Learner or ask the Learner to teach, explain, or perform clinical reasoning. If a question is natural, it must be a brief concern from the Simulated Character's perspective. Never speak, think, act, teach, advise, or answer on behalf of the Learner, nurse, instructor, facilitator, or any other role. Never invent learner actions, thoughts, feelings, dialogue, or identity, and never take on a different role.\n\n"
+            "HISTORY SPEAKER LABELS: prior transcript entries retain native API roles (`assistant` for the Simulated Character and `user` for the Learner). Their content also begins with `SIMULATED CHARACTER:` or `LEARNER:`; these are simulation labels, not additional speakers.\n\n"
             f"CURRENT STAGE: {stage}\n"
-            f"Current-stage behavioral guidance:\n{behavior}\n"
-            f"Relevant semantic transition cues:\n{cues}\n"
-            f"Scenario meta-instructions:\n{scenario['meta']}\n"
-            f"Voice gender: {scenario['voice_gender']}\n"
-            f"Baseline voice style: {scenario['voice_style']}\n"
+            "ACTIVE-STAGE CHARACTER GUIDANCE (respond as the Simulated Character; not a learner questionnaire or facilitator task list):\n"
+            f"{behavior}\n\n"
+            "STAGE / TRANSITION STATE (progression guidance only; it never changes speaker ownership):\n"
+            f"{cues}\n"
+            f"SCENARIO META GUIDANCE (character-side reference only):\n{scenario['meta']}\n"
+            f"OBJECTIVE PROGRESS (lightweight guidance):\n{_objective_progress_context(scenario, state)}\n"
+            "PHASE CONTRACT: Beginning establishes rapport and clarifies the character's immediate concern; it has no minimum length and may transition early when that purpose is served. Middle uses unresolved objectives and the learner's latest meaning to choose the next relevant concern; do not remain on a covered theme merely because the phase is Middle. Ending is appropriate when the scenario's endpoint is naturally ready, the learner signals completion, and/or the character's important concerns have been reasonably addressed or can be acknowledged naturally. Do not force every objective or use turn count as the reason to end.\n"
+            f"Voice: {scenario['voice_gender']} voice; baseline style: {scenario['voice_style']}\n"
             "CONVERSATION MEMORY:\n"
             f"{_conversation_memory(state.get('history', []))}\n"
             "Stage contract: scenario cues are semantic signals, not a checklist or a queue of required questions. "
@@ -342,92 +548,74 @@ class ConversationEngine:
             "scenario's ending purpose in different words, select Ending and complete the conversation. Do not "
             "complete for an ordinary acknowledgement, a polite thanks that leaves a substantive question open, or "
             "a response that merely continues the interaction.\n"
-            "TURN-BUDGET CONTRACT:\n"
+            "TURN-BUDGET CONTRACT: "
             f"Current learner turn: {state.get('current_turn', 0)}; soft target: {state.get('target_turns', TARGET_TURNS)}; "
-            f"turns remaining before the safety cap: {state.get('turns_remaining', MAX_TURNS)}; phase: {state.get('phase', 'normal')}.\n"
+            f"turns remaining before the safety cap: {state.get('turns_remaining', MAX_TURNS)}; phase: {state.get('phase', 'normal')}. "
             "The target is an advisory pressure against indefinite looping, not a minimum, schedule, stage rule, or "
-            "termination trigger. Never complete or emit the Closing merely because a number was reached. Do not add "
-            "filler questions or repeat answered topics to consume turns. Around the later budget window, prefer a "
-            "natural closure only when the scenario's ending cues and the current conversational state support it; "
-            "otherwise continue only as needed to address the scenario.\n"
-            "VOICE/DIALOGUE CONTRACT:\n"
-            "Return JSON only. The dialogue field contains only the character's spoken words. Never put voice, emotion, "
-            "stage notes, brackets, narration, or metadata in dialogue. The voice field contains only a concise style "
-            "description, without brackets or the word 'voice'; it is metadata for TTS and is not spoken.\n"
-            "Questions are optional. First acknowledge how the learner's answer changes your understanding; then "
-            "move to a related concern or a new stage when appropriate. Do not ask a question merely to keep the "
-            "conversation going, and do not repeat an answered question because the answer was imperfect. Respond "
-            "as a human being in the character's situation, not as an assistant optimizing a communication plan. "
-            "Return JSON fields dialogue, voice, stage, stage_transition_ready, complete, "
-            "stop_requested."
+            "termination trigger. Never complete or emit the Closing merely because a number was reached. Do not "
+            "add filler questions or repeat answered topics.\n"
+            "OUTPUT CONTRACT: Return JSON only. `dialogue` contains only the character's spoken words; never put "
+            "voice, emotion, stage notes, brackets, narration, or metadata there. `voice` is concise TTS style "
+            "metadata without brackets or the word 'voice'. Questions are optional. Acknowledge the learner's answer, "
+            "then move to a related concern or a new stage when appropriate. Return fields dialogue, voice, stage, "
+            "stage_transition_ready, complete, stop_requested, active_objective, covered_objectives, "
+            "unresolved_objectives, ending_ready. For objective fields, return the complete current progress "
+            "snapshot using only the scenario objective IDs; preserve genuinely unresolved concerns, allow one "
+            "answer to cover multiple objectives or a future objective early, and do not force every objective "
+            "or example question. Set ending_ready only when a natural endpoint is available; an unresolved "
+            "objective may remain when the character has acknowledged it appropriately, but do not complete "
+            "while an important unresolved concern still needs attention."
         )
 
     def _request_llm_turn(self, state, repair_instruction=""):
-        from openai import OpenAI
-
         scenario = state["scenario"]
         system_prompt = self._system_prompt(scenario, state)
         if repair_instruction:
             system_prompt = f"{system_prompt}\n\nREPAIR INSTRUCTION:\n{repair_instruction}"
-        payload = [{"role": "system", "content": system_prompt}, *state["history"]]
-        logger.debug("LLM context stage=%s turn=%s character=%s learner=%s payload=\n%s", state["current_stage"], state["current_turn"], scenario["character"], scenario["learner"], json.dumps(payload, ensure_ascii=False, indent=2))
+        history = [
+            {
+                **message,
+                "content": format_history_content(message.get("role"), message.get("content", "")),
+            }
+            for message in state["history"]
+        ]
+        payload = [{"role": "system", "content": system_prompt}, *history]
+        request_kind = "repair" if repair_instruction else "generation"
+        measurement = _add_context_measurement(
+            state.get("context_measurements"),
+            payload,
+            request_kind,
+        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "LLM context stage=%s turn=%s character=%s learner=%s payload=\n%s",
+                state["current_stage"],
+                state["current_turn"],
+                scenario["character"],
+                scenario["learner"],
+                json.dumps(payload, ensure_ascii=False, indent=2),
+            )
         timing_callback = state.get("timing_callback")
-        stream_callback = state.get("stream_callback")
         if timing_callback:
             timing_callback("gpt_request_start")
 
         request_kwargs = {
             "model": self.model,
-            "text": {"format": {"type": "json_schema", "name": "character_turn", "schema": {"type": "object", "properties": {"dialogue": {"type": "string"}, "voice": {"type": "string"}, "stage": {"type": "string", "enum": ["beginning", "middle", "ending"]}, "stage_transition_ready": {"type": "boolean"}, "complete": {"type": "boolean"}, "stop_requested": {"type": "boolean"}}, "required": ["dialogue", "voice", "stage", "stage_transition_ready", "complete", "stop_requested"], "additionalProperties": False}, "strict": True}},
+            "text": {"format": {"type": "json_schema", "name": "character_turn", "schema": {"type": "object", "properties": {"dialogue": {"type": "string"}, "voice": {"type": "string"}, "stage": {"type": "string", "enum": ["beginning", "middle", "ending"]}, "stage_transition_ready": {"type": "boolean"}, "complete": {"type": "boolean"}, "stop_requested": {"type": "boolean"}, "active_objective": {"type": "string"}, "covered_objectives": {"type": "array", "items": {"type": "string"}}, "unresolved_objectives": {"type": "array", "items": {"type": "string"}}, "ending_ready": {"type": "boolean"}}, "required": ["dialogue", "voice", "stage", "stage_transition_ready", "complete", "stop_requested", "active_objective", "covered_objectives", "unresolved_objectives", "ending_ready"], "additionalProperties": False}, "strict": True}},
             "input": payload,
         }
 
-        if not stream_callback:
-            response = OpenAI(api_key=self.api_key).responses.create(**request_kwargs)
-            if timing_callback and response.output_text:
-                timing_callback("gpt_first_output")
-            if timing_callback:
-                timing_callback("gpt_completion")
-            return json.loads(response.output_text or "{}")
-
-        response_stream = OpenAI(api_key=self.api_key).responses.create(
-            **request_kwargs,
-            stream=True,
-        )
-        output_text = []
-        dialogue_sent = ""
-        voice_sent = ""
-        first_output_seen = False
-        for event in response_stream:
-            event_type = getattr(event, "type", "")
-            delta = getattr(event, "delta", "") or ""
-            if event_type != "response.output_text.delta" or not delta:
-                continue
-            if not first_output_seen:
-                first_output_seen = True
-                if timing_callback:
-                    timing_callback("gpt_first_output")
-            output_text.append(delta)
-            partial = "".join(output_text)
-            dialogue, _ = _partial_json_field(partial, "dialogue")
-            if dialogue.startswith(dialogue_sent):
-                new_text = dialogue[len(dialogue_sent):]
-                if new_text:
-                    stream_callback({"kind": "gpt_delta", "text": new_text})
-                    dialogue_sent = dialogue
-            voice, voice_complete = _partial_json_field(partial, "voice")
-            if voice_complete and voice != voice_sent:
-                voice_sent = voice
-                stream_callback({"kind": "voice_metadata", "value": voice})
-
+        response = self._openai_client().responses.create(**request_kwargs)
+        _attach_response_usage(measurement, response)
+        _log_context_measurement(measurement)
+        if timing_callback and response.output_text:
+            timing_callback("gpt_first_output")
         if timing_callback:
             timing_callback("gpt_completion")
-        return json.loads("".join(output_text) or "{}")
+        return json.loads(response.output_text or "{}")
 
     def _verify_semantic_ending(self, state, dialogue, proposed_stage):
         """Conservatively verify that a candidate response fulfills the endpoint."""
-        from openai import OpenAI
-
         scenario = state["scenario"]
         payload = [
             {
@@ -454,6 +642,12 @@ class ConversationEngine:
                         "ending_guidance": scenario["ending"],
                         "transition_cues": scenario["middle_to_ending_cues"],
                         "canonical_closing_example": scenario["closing"],
+                        "objective_progress": {
+                            "active_objective": state.get("active_objective", ""),
+                            "covered_objectives": state.get("covered_objectives", []),
+                            "unresolved_objectives": state.get("unresolved_objectives", []),
+                            "ending_ready": state.get("ending_ready", False),
+                        },
                         "conversation_history": state.get("history", []),
                         "candidate_character_response": dialogue,
                     },
@@ -461,9 +655,18 @@ class ConversationEngine:
                 ),
             },
         ]
-        logger.debug("Ending verification payload:\n%s", json.dumps(payload, ensure_ascii=False, indent=2))
+        measurement = _add_context_measurement(
+            state.get("context_measurements"),
+            payload,
+            "semantic_ending_verifier",
+        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Ending verification payload:\n%s",
+                json.dumps(payload, ensure_ascii=False, indent=2),
+            )
         try:
-            response = OpenAI(api_key=self.api_key).responses.create(
+            response = self._openai_client().responses.create(
                 model=self.model,
                 text={
                     "format": {
@@ -484,6 +687,7 @@ class ConversationEngine:
                 },
                 input=payload,
             )
+            _attach_response_usage(measurement, response)
             result = json.loads(response.output_text or "{}")
             check = {
                 "attempted": True,
@@ -499,6 +703,7 @@ class ConversationEngine:
                 "confidence": "low",
                 "reason": f"verifier_error: {type(exc).__name__}",
             }
+        _log_context_measurement(measurement)
         logger.debug(
             "Ending decision stage=%s candidate=%r satisfied=%s confidence=%s reason=%s",
             proposed_stage,
@@ -510,12 +715,19 @@ class ConversationEngine:
         return check
 
     def _llm_turn(self, state):
+        state.setdefault("context_measurements", [])
         scenario = state["scenario"]
+        state.update(_initial_objective_progress(scenario, state))
+        state["recent_topics"] = _recent_topics(state.get("history", []), state.get("recent_topics"))
         result = self._request_llm_turn(state)
         interrupted = bool(result.get("stop_requested"))
         if interrupted:
-            return "", "", state["current_stage"], True, True, {"reason": "interrupt"}
-        parsed_scenario = Scenario(**scenario)
+            return "", "", state["current_stage"], True, True, {
+                "reason": "interrupt",
+                **_normalize_objective_progress(scenario, state, result, state.get("history", [])),
+                "llm_context": list(state.get("context_measurements", [])),
+            }
+        parsed_scenario = Scenario.from_state(scenario)
         proposed_stage = result.get("stage", state["current_stage"])
         transition_ready = bool(result.get("stage_transition_ready"))
         current_stage = state["current_stage"]
@@ -546,16 +758,10 @@ class ConversationEngine:
                 "The draft repeats an answered character concern. Do not ask that question again. "
                 f"The repeated draft question was: {repeated_question} "
                 f"An earlier answered question was: {answered_question} "
-                "Acknowledge the learner's latest answer, let it change Rachel's understanding, and move to a "
+                "Acknowledge the learner's latest answer, let it change the simulated character's understanding, and move to a "
                 "related unresolved concern or a natural stage transition. Questions are optional. Return the same "
                 "JSON schema."
             )
-            if state.get("stream_callback"):
-                # The first streamed draft is provisional. Tell the transport
-                # to discard its displayed/audio buffer before the repair
-                # response begins, preserving the existing anti-repetition
-                # behavior without appending two drafts together.
-                state["stream_callback"]({"kind": "stream_reset"})
             repaired = self._request_llm_turn(state, repair_instruction)
             if repaired.get("stop_requested"):
                 # A repair response is not allowed to turn a normal learner
@@ -577,6 +783,16 @@ class ConversationEngine:
                 raw_dialogue = (result.get("dialogue", "") or "").strip()
                 if _repeated_answered_question(raw_dialogue, state["history"])[0]:
                     raw_dialogue = _remove_questions(raw_dialogue)
+
+        objective_progress = _normalize_objective_progress(
+            scenario,
+            state,
+            result,
+            state.get("history", []),
+        )
+        state.update(objective_progress)
+        objective_ready = not objective_progress["unresolved_objectives"] or objective_progress["ending_ready"]
+        complete = complete and objective_ready
 
         ending_check = {
             "attempted": False,
@@ -604,9 +820,13 @@ class ConversationEngine:
         ):
             ending_check = self._verify_semantic_ending(state, raw_dialogue, proposed_stage)
             if ending_check["satisfied"]:
-                proposed_stage = "ending"
-                transition_ready = True
-                complete = True
+                if objective_ready:
+                    proposed_stage = "ending"
+                    transition_ready = True
+                    complete = True
+                else:
+                    ending_check["satisfied"] = False
+                    ending_check["reason"] = "objective_progress_not_ready"
 
         dialogue, embedded_voice = split_dialogue_and_voice(raw_dialogue)
         voice_value = result.get("voice", "") or embedded_voice
@@ -637,9 +857,11 @@ class ConversationEngine:
             "repetition_repaired": repetition_repaired,
             "repeated_question_blocked": bool(repeated_question),
             "ending_check": ending_check,
+            **objective_progress,
+            "llm_context": list(state.get("context_measurements", [])),
         }
 
-    def respond(self, role_text, messages, conversation_state=None, stream_callback=None, timing_callback=None):
+    def respond(self, role_text, messages, conversation_state=None, timing_callback=None):
         scenario = parse_scenario_prompt(role_text)
         learner_messages = [m for m in messages if m.sender == "student"]
         turn = len(learner_messages)
@@ -659,65 +881,51 @@ class ConversationEngine:
             )
             if not opening_already_emitted:
                 try:
-                    if self._interrupt(latest, timing_callback=timing_callback):
-                        return "", True, {"stage": "ending", "current_stage": "ending", "interrupt_requested": True, "reason": "interrupt"}
+                    context_measurements = []
+                    if self._interrupt(
+                        latest,
+                        timing_callback=timing_callback,
+                        context_measurements=context_measurements,
+                    ):
+                        return "", True, {
+                            "stage": "ending",
+                            "current_stage": "ending",
+                            "interrupt_requested": True,
+                            "reason": "interrupt",
+                            "llm_context": context_measurements,
+                        }
                 except Exception:
                     logger.exception("Interrupt classification failed")
-                return scenario.opening_line, False, {"stage": "beginning", "current_stage": "beginning", "voice_metadata": scenario.voice_metadata(), "reason": "fixed_opening_line"}
+                return scenario.opening_line, False, {
+                    "stage": "beginning",
+                    "current_stage": "beginning",
+                    "voice_metadata": scenario.voice_metadata(),
+                    "reason": "fixed_opening_line",
+                    "llm_context": context_measurements,
+                }
         current_stage = (conversation_state or {}).get("current_stage")
         if current_stage not in {"beginning", "middle", "ending"}:
             current_stage = "beginning"
+        scenario_state = scenario.to_state()
+        objective_progress = _initial_objective_progress(scenario_state, conversation_state or {})
         graph_input = {
-            "scenario": scenario.to_state(),
-            "history": _history(messages),
+            "scenario": scenario_state,
+            "history": _history(messages, scenario),
+            **objective_progress,
+            "recent_topics": _recent_topics(_history(messages, scenario)),
             "current_turn": turn,
             "target_turns": TARGET_TURNS,
             "max_turns": MAX_TURNS,
             "current_stage": current_stage,
             "conversation_stage": current_stage,
             "stage_transition_ready": (conversation_state or {}).get("stage_transition_ready", False),
-            # Hold text deltas until the parallel interrupt check confirms
-            # that this is an ordinary turn.
-            "stream_callback": None,
             "timing_callback": timing_callback,
+            "context_measurements": [],
         }
-        stream_gate = threading.Event() if stream_callback else None
-        stream_state = {"allowed": True}
-        if stream_callback:
-            def gated_stream_callback(event):
-                # Do not expose a generated answer until the parallel stop
-                # classifier has decided that this is an ordinary turn. If
-                # the classifier requests a stop, discard the generated draft
-                # while still allowing the graph worker to finish cleanly.
-                stream_gate.wait()
-                if stream_state["allowed"]:
-                    stream_callback(event)
 
-            graph_input["stream_callback"] = gated_stream_callback
-
-        # The interrupt classifier and the normal graph request are
-        # independent. Running them concurrently removes one network round
-        # trip from ordinary turns; the streamed text remains gated until the
-        # classifier result is known.
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            interrupt_future = executor.submit(self._interrupt, latest, timing_callback)
-            graph_future = executor.submit(self.graph.invoke, graph_input)
-            try:
-                interrupt_requested = interrupt_future.result()
-            except Exception:
-                logger.exception("Interrupt classification failed")
-                interrupt_requested = False
-            if stream_gate is not None:
-                stream_state["allowed"] = not interrupt_requested
-                stream_gate.set()
-            state = graph_future.result()
-        if interrupt_requested:
-            return "", True, {
-                "stage": "ending",
-                "current_stage": "ending",
-                "interrupt_requested": True,
-                "reason": "interrupt",
-            }
+        # Normal turns already request semantic stop intent in the structured
+        # response. A second classifier request only added latency and forced
+        state = self.graph.invoke(graph_input)
         debug_info = {
             **state.get("debug_info", {}),
             "stage": state.get("current_stage", current_stage),
@@ -725,5 +933,11 @@ class ConversationEngine:
             "phase": state.get("phase"),
             "voice_metadata": state.get("voice_metadata", ""),
             "completion_status": state.get("completion_status", False),
+            "active_objective": state.get("active_objective", ""),
+            "covered_objectives": list(state.get("covered_objectives", [])),
+            "unresolved_objectives": list(state.get("unresolved_objectives", [])),
+            "recent_topics": list(state.get("recent_topics", [])),
+            "ending_ready": state.get("ending_ready", False),
+            "llm_context": list(state.get("context_measurements", [])),
         }
         return state["response"], state["completion_status"], debug_info

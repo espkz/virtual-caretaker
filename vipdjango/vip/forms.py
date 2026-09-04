@@ -8,10 +8,27 @@ class RolePromptForm(forms.Form):
     is_active = forms.BooleanField(required=False)
 
     role = forms.CharField(widget=forms.Textarea(attrs={"rows": 5}))
+    background_context = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 8}),
+        help_text="Scenario facts, circumstances, beliefs, feelings, and experiences.",
+    )
     learner_role = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
-        help_text="Optional: who is the learner/user in this simulation.",
+        help_text="Who is the human participant in this simulation.",
+    )
+    introduction = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 5}),
+        help_text="Optional fixed message shown when a new chat starts.",
+    )
+    conversation_objectives = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 10}),
+        help_text=(
+            "Use one ### heading per concern, with possible expressions and resolution guidance underneath."
+        ),
     )
     voice_gender = forms.ChoiceField(choices=[("female", "female"), ("male", "male")], initial="female")
     voice_style = forms.CharField(
@@ -19,41 +36,29 @@ class RolePromptForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2}),
         help_text="Optional speaking style. Example: warm, calm, relatively slow.",
     )
-    introduction = forms.CharField(widget=forms.Textarea(attrs={"rows": 5}))
     opening_line = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
         help_text="Optional. Shown as the first in-character response after the learner greets the character.",
     )
-    beginning = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}))
+    beginning = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 6}))
     begin_to_middle_cues = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
         help_text="Optional. One cue per line (bullet points are fine).",
     )
-    middle = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}))
+    middle = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 8}))
     middle_to_ending_cues = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
         help_text="Optional. One cue per line (bullet points are fine).",
     )
-    ending = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}))
-    end_of_conversation_cues = forms.CharField(
-        required=False,
-        widget=forms.Textarea(attrs={"rows": 4}),
-        help_text="Optional scenario guidance for recognizing and shaping a natural conclusion.",
-    )
+    ending = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 6}))
     closing = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={"rows": 4}),
         help_text="Optional scenario-provided closing guidance.",
     )
-    meta_instructions = forms.CharField(
-        required=False,
-        widget=forms.Textarea(attrs={"rows": 4}),
-        help_text="Optional global constraints.",
-    )
-
     @classmethod
     def initial_from_prompt(cls, prompt):
         return cls.initial_from_content(
@@ -69,59 +74,73 @@ class RolePromptForm(forms.Form):
         role = find_section_by_aliases(sections, ["role", "role summary", "character"])
         if not role:
             role = (content or "").strip()
+        background = find_section_by_aliases(sections, ["background and context", "background", "context"])
+        introduction = find_section_by_aliases(sections, ["introduction", "introduction: greeting"])
+        legacy_meta = find_section_by_aliases(
+            sections,
+            ["meta instructions", "meta-instructions", "meta instruction", "notes"],
+        )
+        if legacy_meta:
+            background = "\n\n".join(value for value in (background, "Scenario constraints:\n" + legacy_meta) if value)
+        ending = find_section_by_aliases(
+            sections,
+            ["ending", "end", "conversation progression: end", "conversation progression: ending"],
+        )
+        legacy_end_cues = find_section_by_aliases(sections, ["end of conversation cues"])
+        if legacy_end_cues:
+            ending = "\n\n".join(value for value in (ending, "End-of-conversation guidance:\n" + legacy_end_cues) if value)
         return {
             "title": title,
             "is_active": is_active,
             "role": role,
+            "background_context": background,
             "learner_role": find_section_by_aliases(sections, ["learner role", "user role"]),
+            "introduction": introduction,
+            "conversation_objectives": find_section_by_aliases(
+                sections, ["conversation objectives", "conversation goals", "objectives", "goals"]
+            ),
             "voice_gender": voice_gender,
             "voice_style": find_section_by_aliases(sections, ["voice style", "voice instructions"]),
-            "introduction": find_section_by_aliases(sections, ["introduction", "introduction: greeting"]),
             "opening_line": find_section_by_aliases(sections, ["opening line"]),
             "beginning": find_section_by_aliases(sections, ["beginning", "conversation progression: beginning"]),
             "begin_to_middle_cues": find_section_by_aliases(
                 sections,
-                ["beginning to middle cues", "middle triggers", "middle trigger", "trigger"],
+                ["beginning to middle transition", "beginning to middle cues", "middle triggers", "middle trigger", "trigger"],
             ),
             "middle": find_section_by_aliases(sections, ["middle", "conversation progression: middle"]),
             "middle_to_ending_cues": find_section_by_aliases(
                 sections,
-                ["middle to ending cues", "ending triggers", "ending trigger"],
+                ["middle to ending transition", "middle to ending cues", "ending triggers", "ending trigger"],
             ),
-            "ending": find_section_by_aliases(
-                sections,
-                ["ending", "end", "conversation progression: end", "conversation progression: ending"],
-            ),
-            "end_of_conversation_cues": find_section_by_aliases(sections, ["end of conversation cues"]),
+            "ending": ending,
             "closing": find_section_by_aliases(sections, ["closing", "final response"]),
-            "meta_instructions": find_section_by_aliases(
-                sections,
-                ["meta instructions", "meta-instructions", "meta instruction", "notes"],
-            ),
         }
 
     def render_markdown_content(self):
         data = self.cleaned_data
 
         def block(header, value):
-            value = (value or "").strip()
-            return f"## {header}\n{value}\n"
+            return f"## {header}\n{(value or '').strip()}\n"
+
+        def subsection(header, value):
+            return f"### {header}\n{(value or '').strip()}\n"
 
         parts = [
             block("Role", data.get("role")),
-            block("Learner Role", data.get("learner_role")),
+            block("Background and Context", data.get("background_context")),
+            block("User Role", data.get("learner_role")),
+            block("Conversation Goals", data.get("conversation_objectives")),
+            block("Introduction", data.get("introduction")),
+            "## Conversation Stages\n",
+            subsection("Opening Line", data.get("opening_line")),
+            subsection("Beginning", data.get("beginning")),
+            subsection("Beginning to Middle Transition", data.get("begin_to_middle_cues")),
+            subsection("Middle", data.get("middle")),
+            subsection("Middle to Ending Transition", data.get("middle_to_ending_cues")),
+            subsection("Ending", data.get("ending")),
+            block("Closing", data.get("closing")),
             block("Voice Gender", data.get("voice_gender")),
             block("Voice Style", data.get("voice_style")),
-            block("Introduction", data.get("introduction")),
-            block("Opening Line", data.get("opening_line")),
-            block("Beginning", data.get("beginning")),
-            block("Beginning to Middle Cues", data.get("begin_to_middle_cues")),
-            block("Middle", data.get("middle")),
-            block("Middle to Ending Cues", data.get("middle_to_ending_cues")),
-            block("Ending", data.get("ending")),
-            block("End of Conversation Cues", data.get("end_of_conversation_cues")),
-            block("Closing", data.get("closing")),
-            block("Meta Instructions", data.get("meta_instructions")),
         ]
         return "\n".join(parts).strip() + "\n"
 

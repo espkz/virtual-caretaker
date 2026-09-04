@@ -37,6 +37,11 @@ class ChatSession(models.Model):
     conversation_stage = models.CharField(max_length=20, default="beginning")
     conversation_phase = models.CharField(max_length=32, default="normal")
     completion_status = models.BooleanField(default=False)
+    active_objective = models.CharField(max_length=160, blank=True, default="")
+    covered_objectives = models.JSONField(default=list, blank=True)
+    unresolved_objectives = models.JSONField(default=list, blank=True)
+    recent_topics = models.JSONField(default=list, blank=True)
+    ending_ready = models.BooleanField(default=False)
     # Only one learner turn may be in flight for a session.  The claim is
     # cleared when the matching assistant response is committed or the
     # request is released after an error/cancellation.

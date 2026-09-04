@@ -60,6 +60,7 @@
         <h2>Prompt Builder</h2>
         <div class="tabs">
             <button type="button" class="tab-btn active" data-tab="builder-tab">Builder</button>
+            <button type="button" class="tab-btn" data-tab="introduction-tab">Introduction</button>
             <button type="button" class="tab-btn" data-tab="preview-tab">Live Preview</button>
             <button type="button" class="tab-btn" data-tab="markdown-tab">Full Markdown</button>
         </div>
@@ -90,23 +91,28 @@
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.learner_role.id_for_label }}">Learner Role</label>
+                    <label for="{{ form.background_context.id_for_label }}">Background and Context</label>
+                    {{ form.background_context }}
+                    {% if form.background_context.help_text %}
+                    <p class="preview-note">{{ form.background_context.help_text }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.learner_role.id_for_label }}">User Role</label>
                     {{ form.learner_role }}
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.voice_gender.id_for_label }}">Voice Gender</label>
-                    {{ form.voice_gender }}
+                    <label for="{{ form.conversation_objectives.id_for_label }}">Conversation Goals</label>
+                    {{ form.conversation_objectives }}
+                    {% if form.conversation_objectives.help_text %}
+                    <p class="preview-note">{{ form.conversation_objectives.help_text }}</p>
+                    {% endif %}
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.voice_style.id_for_label }}">Voice Style</label>
-                    {{ form.voice_style }}
-                </div>
-
-                <div class="field">
-                    <label for="{{ form.introduction.id_for_label }}">Introduction</label>
-                    {{ form.introduction }}
+                    <h3>Conversation Stages</h3>
                 </div>
 
                 <div class="field">
@@ -123,7 +129,7 @@
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.begin_to_middle_cues.id_for_label }}">Beginning to Middle Cues</label>
+                    <label for="{{ form.begin_to_middle_cues.id_for_label }}">Beginning to Middle Transition</label>
                     {{ form.begin_to_middle_cues }}
                 </div>
 
@@ -133,18 +139,13 @@
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.middle_to_ending_cues.id_for_label }}">Middle to Ending Cues</label>
+                    <label for="{{ form.middle_to_ending_cues.id_for_label }}">Middle to Ending Transition</label>
                     {{ form.middle_to_ending_cues }}
                 </div>
 
                 <div class="field">
                     <label for="{{ form.ending.id_for_label }}">Ending</label>
                     {{ form.ending }}
-                </div>
-
-                <div class="field">
-                    <label for="{{ form.end_of_conversation_cues.id_for_label }}">End of Conversation Cues</label>
-                    {{ form.end_of_conversation_cues }}
                 </div>
 
                 <div class="field">
@@ -156,12 +157,28 @@
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.meta_instructions.id_for_label }}">Meta Instructions</label>
-                    {{ form.meta_instructions }}
+                    <label for="{{ form.voice_gender.id_for_label }}">Voice Gender</label>
+                    {{ form.voice_gender }}
+                </div>
+
+                <div class="field">
+                    <label for="{{ form.voice_style.id_for_label }}">Voice Style</label>
+                    {{ form.voice_style }}
                 </div>
 
                 <div class="field">
                     <label for="{{ form.is_active.id_for_label }}">{{ form.is_active }} Active</label>
+                </div>
+            </div>
+
+            <div class="tab-panel" id="introduction-tab">
+                <h3>Introduction</h3>
+                <div class="field">
+                    <label for="{{ form.introduction.id_for_label }}">Introduction Message</label>
+                    {{ form.introduction }}
+                    {% if form.introduction.help_text %}
+                    <p class="preview-note">{{ form.introduction.help_text }}</p>
+                    {% endif %}
                 </div>
             </div>
 
@@ -189,19 +206,19 @@
 <script>
     const fieldIds = [
         "id_role",
+        "id_background_context",
         "id_learner_role",
-        "id_voice_gender",
-        "id_voice_style",
         "id_introduction",
+        "id_conversation_objectives",
         "id_opening_line",
         "id_beginning",
         "id_begin_to_middle_cues",
         "id_middle",
         "id_middle_to_ending_cues",
         "id_ending",
-        "id_end_of_conversation_cues",
         "id_closing",
-        "id_meta_instructions",
+        "id_voice_gender",
+        "id_voice_style",
     ];
     const preview = document.getElementById("md-preview");
     const sourceView = document.getElementById("md-source");
@@ -213,26 +230,30 @@
     }
 
     function section(title, value) {
-        if (!value) return "";
-        return "## " + title + "\n" + value + "\n\n";
+        return "## " + title + "\n" + (value || "") + "\n\n";
+    }
+
+    function subsection(title, value) {
+        return "### " + title + "\n" + (value || "") + "\n";
     }
 
     function toMarkdown() {
         return (
             section("Role", getValue("id_role")) +
-            section("Learner Role", getValue("id_learner_role")) +
-            section("Voice Gender", getValue("id_voice_gender")) +
-            section("Voice Style", getValue("id_voice_style")) +
+            section("Background and Context", getValue("id_background_context")) +
+            section("User Role", getValue("id_learner_role")) +
+            section("Conversation Goals", getValue("id_conversation_objectives")) +
             section("Introduction", getValue("id_introduction")) +
-            section("Opening Line", getValue("id_opening_line")) +
-            section("Beginning", getValue("id_beginning")) +
-            section("Beginning to Middle Cues", getValue("id_begin_to_middle_cues")) +
-            section("Middle", getValue("id_middle")) +
-            section("Middle to Ending Cues", getValue("id_middle_to_ending_cues")) +
-            section("Ending", getValue("id_ending")) +
-            section("End of Conversation Cues", getValue("id_end_of_conversation_cues")) +
+            "## Conversation Stages\n\n" +
+            subsection("Opening Line", getValue("id_opening_line")) +
+            subsection("Beginning", getValue("id_beginning")) +
+            subsection("Beginning to Middle Transition", getValue("id_begin_to_middle_cues")) +
+            subsection("Middle", getValue("id_middle")) +
+            subsection("Middle to Ending Transition", getValue("id_middle_to_ending_cues")) +
+            subsection("Ending", getValue("id_ending")) +
             section("Closing", getValue("id_closing")) +
-            section("Meta Instructions", getValue("id_meta_instructions"))
+            section("Voice Gender", getValue("id_voice_gender")) +
+            section("Voice Style", getValue("id_voice_style"))
         ).trim();
     }
 

@@ -22,13 +22,25 @@ def normalize_gender(value, default="female"):
 def split_markdown_sections(text):
     sections = {}
     current = ""
+    nested = ""
     for line in (text or "").splitlines():
-        match = re.match(r"^\s*##\s+(.+?)\s*$", line)
+        match = re.match(r"^\s*(#{2,6})\s+(.+?)\s*$", line)
         if match:
-            current = normalize_heading(match.group(1))
-            sections.setdefault(current, [])
+            level = len(match.group(1))
+            heading = normalize_heading(match.group(2))
+            if level == 2:
+                current = heading
+                nested = ""
+                sections.setdefault(current, [])
+            else:
+                nested = heading
+                sections.setdefault(nested, [])
+                if current:
+                    sections[current].append(line)
         elif current:
             sections[current].append(line)
+            if nested:
+                sections[nested].append(line)
     return {key: "\n".join(value).strip() for key, value in sections.items()}
 
 
