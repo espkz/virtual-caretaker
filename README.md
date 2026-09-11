@@ -1,80 +1,123 @@
 # Virtual Caretaker
 
-Virtual patient/caregiver roleplay platform for nursing education.
+Virtual Caretaker is a Django platform for nursing-education roleplay. A learner talks with an LLM-driven simulated patient or caregiver, while instructors manage scenarios, student accounts, and conversation logs.
 
-Main app stack is now **Django**.
+The Django application is responsible for authentication, role-prompt management, chat sessions, transcript persistence, browser text/speech interaction, and text-to-speech playback. The conversation engine parses a scenario, builds the model context, enforces character ownership and bounded progression, and returns dialogue plus voice metadata. The active pipeline is documented in [conversation_pipeline.md](conversation_pipeline.md).
 
-## How It Works
+## Project structure
 
-There are two main account roles:
+```text
+prompts/
+  global_prompt.md                 Shared conversation behavior
+  role_prompt.md                   Scenario-authoring template
+  role_*.md                        Checked-in scenario examples
 
-- `Instructor`:
-  - manages prompts (create, edit, activate/deactivate, delete, upload/download)
-  - creates and manages student accounts and class group assignments
-  - reviews student chat logs
-  - can use a test-chat interface to validate prompt behavior
+testing/
+  manual_conversation.py           Terminal text-chat harness
 
-- `Student`:
-  - can only access active prompts assigned through the app flow
-  - chats with the roleplay assistant using text or speech input
-  - can enable/disable emotion voice behavior during TTS playback
-  - can download conversation logs
+conversation_pipeline.md           Detailed engine and request-flow guide
+test_conversations/                Historical/manual JSON and text transcripts
+archived/                           Legacy backend and superseded prompts
 
-## Tech Stack
-
-- Python3
-- Django
-- SQLite (default app database)
-- OpenAI API (chat generation + TTS)
-- gTTS (non-emotion TTS fallback)
-- Browser Web Speech API (STT for microphone input)
-- Podman (containerized deployment runtime)
-
-## Branches
-
-- `main`: current Django application (active branch)
-- `streamlit-v.20260430`: legacy Streamlit implementation
-
-If you need the old Streamlit code, check out the `streamlit-v.20260430` branch.
-
-## Django App Location
-
-- Project root: `vipdjango/`
-- App: `vipdjango/vip/`
-
-## Local Development (Django)
-
-1. Create/activate a virtual environment.
-2. Install requirements:
-
-```bash
-cd vipdjango
-pip install -r requirements.txt
+vipdjango/
+  manage.py                         Django command entry point
+  requirements.txt                  Python dependencies
+  vip/
+    conversation_engine.py          Prompt assembly, model call, response guards
+    conversation_graph.py           LangGraph lifecycle and request state
+    conversation_scenario.py        Scenario Markdown parser and data model
+    prompt_utils.py                 Heading and section parsing helpers
+    models.py                       RolePrompt, ChatSession, ChatMessage
+    views.py                        HTTP chat flow, persistence, and TTS
 ```
 
-3. Export env vars (example uses `env.txt` at repo root):
+`archived/prompts/Core Questions.docx` is supporting scenario-authoring material. It is not loaded by the runtime. The old standalone backend and old prompt variants remain under `archived/` for reference only.
+
+## Setup
+
+Use Python 3.13 or a compatible supported Python version, then create an environment from the repository root:
 
 ```bash
-cd ..
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r vipdjango/requirements.txt
+```
+
+The project does not load `.env` files automatically. Export variables in the shell, or create a local ignored `env.txt` and source it before using Django:
+
+```bash
+export DJANGO_SECRET_KEY='replace-with-a-local-secret'
+export OPENAI_API_KEY='your-openai-api-key'
+export DJANGO_DEBUG=true
+export DJANGO_SECURE_SSL_REDIRECT=false
+export DJANGO_SESSION_COOKIE_SECURE=false
+export DJANGO_CSRF_COOKIE_SECURE=false
+export DJANGO_SECURE_PROXY_SSL_HEADER=false
+```
+
+`DJANGO_SECRET_KEY` is required by Django. `OPENAI_API_KEY` is required for live conversation generation and TTS. The default database is SQLite at `vipdjango/db.sqlite3`; set `SQLITE_PATH` to override it. PostgreSQL is available only when `DJANGO_DB_ENGINE=postgres`, with `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, and optional `POSTGRES_PORT` configured.
+
+Other optional Django settings include `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `DJANGO_DEBUG`, and the `DJANGO_SECURE_*` flags in `vipdjango/vipson_manager/settings.py`. For a local HTTP `runserver`, the four security flags shown above avoid HTTPS-only redirects and cookies intended for a TLS deployment.
+
+Run the database migrations from the repository root:
+
+```bash
+python vipdjango/manage.py migrate
+```
+
+The ignored `env.txt` convention is equivalent to:
+
+```bash
 set -a
 source env.txt
 set +a
 ```
 
-4. Run migrations and start dev server:
+## Manual text chatbot testing
+
+This path exercises only the text conversation engine. It does not start Django, use the database, run the frontend, or generate audio.
+
+From the repository root, with the virtual environment active and `OPENAI_API_KEY` exported:
 
 ```bash
-cd vipdjango
-python manage.py migrate
-python manage.py runserver 127.0.0.1:8001
+python testing/manual_conversation.py
 ```
 
-## Notes
+The script lists the checked-in `prompts/role_*.md` scenarios. Choose one, then type learner messages at the `YOU:` prompt. The engine prints the simulated character response and any normalized voice style metadata. A live run calls the same `ConversationEngine` used by the Django chat flow.
 
-- Prompt templates/files are under `prompts/`.
-- OpenAI key and Django settings are environment-variable based.
+To select a scenario directly or inspect the structured debug state:
 
-## Resources
+```bash
+python testing/manual_conversation.py --scenario prompts/role_rachel_ellison_1.md
+python testing/manual_conversation.py --scenario prompts/role_rachel_ellison_2.md --verbose
+```
 
-- [OpenAI TTS](https://platform.openai.com/docs/guides/text-to-speech)
-- [Django Docs](https://docs.djangoproject.com/)
+Available commands during a chat are `/help`, `/status`, `/save`, and `/stop`. EOF or Ctrl-C also stops the session and saves a transcript when one exists. Completed or explicitly saved transcripts go to `test_conversations/` by default; use `--output-dir PATH` to choose another directory. Use `--api-key KEY` only when an environment variable is not convenient.
+
+The terminal harness keeps its transcript in memory. It is ideal for manually checking prompting and response behavior; use the Django path and automated view tests when you need to inspect database-backed session-state persistence.
+
+## Running the local Django server
+
+`manage.py` is at `vipdjango/manage.py`. After setup, environment configuration, and migrations, start the development server from the repository root:
+
+```bash
+python vipdjango/manage.py runserver
+```
+
+The default local URL is [http://127.0.0.1:8000/](http://127.0.0.1:8000/). The application redirects unauthenticated users to the login flow under `/accounts/login/`. An OpenAI key is needed when a chat turn or TTS request reaches the model; the server can start without one, but live conversation responses will report that it is missing.
+
+For a local instructor/student workflow, create or use accounts through the Django application, activate a `RolePrompt`, and use the instructor test-chat page or student dashboard. The browser voice path uses the browser Speech Recognition API for speech input and requests complete TTS audio after an assistant response is saved.
+
+## Conversation-engine development
+
+Start with [conversation_pipeline.md](conversation_pipeline.md) for the end-to-end flow.
+
+- Change shared prompting rules in `prompts/global_prompt.md`
+- Change scenario identity, background, stages, topic guidance, or closing in `prompts/role_*.md` or the corresponding database `RolePrompt.content`
+- Inspect prompt parsing in `vipdjango/vip/conversation_scenario.py` and `vipdjango/vip/prompt_utils.py`
+- Inspect model context, structured output handling, and response guards in `vipdjango/vip/conversation_engine.py`
+- Inspect lifecycle, turn budgets, and graph state in `vipdjango/vip/conversation_graph.py`
+- Use `testing/manual_conversation.py` for a quick terminal conversation
+- Run automated tests with `python vipdjango/manage.py test vip.tests`
+
+Keep the manual harness focused on terminal I/O. Conversation policy belongs in the engine and prompt files so the browser and terminal paths continue to exercise the same behavior.

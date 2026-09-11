@@ -112,7 +112,6 @@
             <form class="message-form" method="post" action="{% url 'vip:student_dashboard' %}">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="send_message">
-                <input type="hidden" id="voice-timing" name="voice_timing" value="">
                 <input type="hidden" id="voice-turn-id" name="turn_id" value="">
                 {% if selected_prompt %}
                 <input type="hidden" name="prompt_id" value="{{ selected_prompt.id }}">
@@ -166,23 +165,8 @@
         const sendMessageBtn = document.getElementById("send-message-btn");
         const micToggleBtn = document.getElementById("stt-toggle");
         const status = document.getElementById("stt-status");
-        const voiceTimingInput = document.getElementById("voice-timing");
         const voiceTurnInput = document.getElementById("voice-turn-id");
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const pageTrace = new URLSearchParams(window.location.search).get("trace");
-        const currentSessionId = "{% if current_session %}{{ current_session.id }}{% endif %}";
-        const voiceTiming = {
-            trace_id: pageTrace || ((window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now())),
-            events: {}
-        };
-        const firstTimingMarks = new Set([
-            "recording_start", "recording_end", "speech_end",
-            "stt_start", "stt_completion", "stt_finalization",
-            "gpt_request_start", "gpt_first_output", "tts_text_first_usable",
-            "response_display", "response_generation_complete", "response_complete",
-            "first_tts_audio_data", "tts_first_audio_chunk", "audio_playback_start",
-            "tts_request_start", "client_pipeline_complete"
-        ]);
         function normalizeFinalTranscript(value) {
             let text = (value || "").replace(/\s+/g, " ").trim();
             if (!text) {
@@ -210,43 +194,6 @@
             }
             return voiceTurnInput ? voiceTurnInput.value : "";
         }
-        function browserEpochMs() {
-            return (performance.timeOrigin || (Date.now() - performance.now())) + performance.now();
-        }
-        function markVoiceTiming(name) {
-            if (firstTimingMarks.has(name) && voiceTiming.events[name] !== undefined) {
-                return;
-            }
-            voiceTiming.events[name] = browserEpochMs();
-        }
-        function flushVoiceTiming() {
-            if (voiceTimingInput) {
-                voiceTimingInput.value = JSON.stringify(voiceTiming);
-            }
-        }
-        function reportVoiceTiming(messageId, turnId, sessionId) {
-            const timingReport = new URLSearchParams();
-            timingReport.set("timing", JSON.stringify(voiceTiming));
-            if (sessionId || currentSessionId) {
-                timingReport.set("session_id", sessionId || currentSessionId);
-            }
-            if (messageId) {
-                timingReport.set("message_id", messageId);
-            }
-            if (turnId) {
-                timingReport.set("turn_id", turnId);
-            }
-            fetch(voiceTimingUrl, {
-                method: "POST",
-                headers: {"X-CSRFToken": csrfToken()},
-                body: timingReport,
-                keepalive: true
-            }).catch(function () {});
-        }
-        if (pageTrace) {
-            markVoiceTiming("response_display");
-        }
-
         let recognition = null;
         let isListening = false;
         let shouldAutoSubmit = false;
@@ -260,8 +207,6 @@
             isListening = false;
             shouldAutoSubmit = false;
             recognition.onstart = function () {
-                markVoiceTiming("recording_start");
-                markVoiceTiming("stt_start");
                 committedTranscript = textarea.value ? textarea.value.trim() : "";
                 if (committedTranscript) {
                     committedTranscript += " ";
@@ -287,12 +232,6 @@
                 status.textContent = "Speech error: " + event.error;
             };
             recognition.onend = function () {
-                markVoiceTiming("recording_end");
-                // SpeechRecognition has delivered its final result by
-                // onend; this is the complete-transcript boundary used for
-                // the end-of-speech latency measurement.
-                markVoiceTiming("stt_completion");
-                markVoiceTiming("stt_finalization");
                 if (status.textContent === "Listening...") {
                     status.textContent = "Microphone stopped.";
                 }
@@ -315,7 +254,6 @@
                     return;
                 }
                 shouldAutoSubmit = true;
-                markVoiceTiming("speech_end");
                 recognition.stop();
             });
 
@@ -342,7 +280,6 @@
                 if (isListening && recognition) {
                     event.preventDefault();
                     shouldAutoSubmit = true;
-                    markVoiceTiming("speech_end");
                     recognition.stop();
                     return;
                 }
@@ -351,7 +288,6 @@
                     return;
                 }
                 ensureTurnId();
-                flushVoiceTiming();
                 if (messageForm.dataset.sending === "1") {
                     event.preventDefault();
                     return;
@@ -378,7 +314,6 @@
                 localStorage.setItem("emotion_voice_enabled", emotionToggle.checked ? "1" : "0");
             });
         }
-        const voiceTimingUrl = "{% url 'vip:student_voice_timing' %}";
         const ttsButtons = document.querySelectorAll(".tts-button");
         const audioRequests = new WeakMap();
         function stopAllOtherAudio(exceptAudio) {
@@ -413,9 +348,7 @@
                 if (audioStatus) {
                     audioStatus.textContent = "Generating voice...";
                 }
-                markVoiceTiming("tts_text_first_usable");
-                markVoiceTiming("tts_request_start");
-                const audioUrl = url + "?emotion=" + emotionFlag + "&trace=" + encodeURIComponent(voiceTiming.trace_id);
+                const audioUrl = url + "?emotion=" + emotionFlag;
                 if (audioRequests.get(audioPlayer) !== requestState) {
                     return;
                 }
@@ -427,10 +360,6 @@
                 if (audioStatus) {
                     audioStatus.textContent = "Voice ready. Playing...";
                 }
-                audioPlayer.addEventListener("playing", function () {
-                    markVoiceTiming("audio_playback_start");
-                    reportVoiceTiming(btn.dataset.messageId, "");
-                }, {once: true});
                 await audioPlayer.play();
             } catch (err) {
                 if (audioRequests.get(audioPlayer) !== requestState) {

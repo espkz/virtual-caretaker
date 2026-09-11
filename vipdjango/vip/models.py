@@ -41,6 +41,13 @@ class ChatSession(models.Model):
     covered_objectives = models.JSONField(default=list, blank=True)
     unresolved_objectives = models.JSONField(default=list, blank=True)
     recent_topics = models.JSONField(default=list, blank=True)
+    # Concrete concern clusters parsed from the scenario's Middle guidance.
+    # These are monotonic application state; the model reports context, while
+    # the application advances the ledger and prevents reopening a topic.
+    active_topic = models.CharField(max_length=160, blank=True, default="")
+    covered_topics = models.JSONField(default=list, blank=True)
+    unresolved_topics = models.JSONField(default=list, blank=True)
+    topic_turn_counts = models.JSONField(default=dict, blank=True)
     ending_ready = models.BooleanField(default=False)
     # Only one learner turn may be in flight for a session.  The claim is
     # cleared when the matching assistant response is committed or the
@@ -66,9 +73,6 @@ class ChatMessage(models.Model):
     sender = models.CharField(max_length=20, choices=Sender.choices)
     content = models.TextField()
     voice_metadata = models.TextField(blank=True, default="")
-    # The complete browser/server voice trace for the turn that produced this
-    # message.  Keeping it with the transcript makes timing downloadable.
-    pipeline_timing = models.JSONField(blank=True, default=dict)
     # A client-generated ID ties the learner message to exactly one assistant
     # response. Blank keeps legacy rows valid; new turns always provide it.
     turn_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
