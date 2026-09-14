@@ -4,11 +4,12 @@ import io
 import csv
 import logging
 import uuid
+from datetime import timedelta
 from pathlib import Path
 from urllib.parse import urlencode
 
 from django.conf import settings
-from django.http import HttpResponse, HttpResponseBadRequest
+from django.http import HttpResponse, HttpResponseBadRequest, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
@@ -80,11 +81,13 @@ def _generate_assistant_response(
 ):
     api_key = _load_api_key()
     if not api_key:
-        return "OpenAI API key is not configured on the server yet.", False, {"stage": "error", "reason": "missing_api_key"}
+        raise RuntimeError("OPENAI_API_KEY is not configured")
     engine = ConversationEngine(_extract_template_prefix(), api_key)
     conversation_state = None
     if session is not None:
         conversation_state = {
+            "core_question_state": session.core_question_state,
+            "completion_status": session.completion_status,
             "current_stage": session.conversation_stage,
             "active_objective": session.active_objective,
             "covered_objectives": list(session.covered_objectives or []),
@@ -124,6 +127,16 @@ def _accept_learner_turn(session, user_text, turn_id):
             sender=ChatMessage.Sender.STUDENT,
             turn_id=turn_id,
         ).first()
+        if locked_session.ended_at is not None:
+            return locked_session, "closed", None
+        if locked_session.active_turn_id and (
+            locked_session.active_claimed_at is None
+            or locked_session.active_claimed_at < timezone.now() - timedelta(seconds=90)
+        ):
+            locked_session.active_turn_id = ""
+            locked_session.active_claim_id = ""
+            locked_session.active_claimed_at = None
+            locked_session.save(update_fields=["active_turn_id", "active_claim_id", "active_claimed_at"])
         if existing_student:
             if existing_student.content.strip() != user_text.strip():
                 logger.warning(
@@ -146,7 +159,8 @@ def _accept_learner_turn(session, user_text, turn_id):
             # message instead of inserting a second learner turn.
             locked_session.active_turn_id = turn_id
             locked_session.active_claim_id = uuid.uuid4().hex
-            locked_session.save(update_fields=["active_turn_id", "active_claim_id"])
+            locked_session.active_claimed_at = timezone.now()
+            locked_session.save(update_fields=["active_turn_id", "active_claim_id", "active_claimed_at"])
             return locked_session, "accepted", None
 
         if locked_session.active_turn_id:
@@ -164,7 +178,8 @@ def _accept_learner_turn(session, user_text, turn_id):
         )
         locked_session.active_turn_id = turn_id
         locked_session.active_claim_id = uuid.uuid4().hex
-        locked_session.save(update_fields=["active_turn_id", "active_claim_id"])
+        locked_session.active_claimed_at = timezone.now()
+        locked_session.save(update_fields=["active_turn_id", "active_claim_id", "active_claimed_at"])
         return locked_session, "accepted", None
 
 
@@ -180,7 +195,8 @@ def _release_learner_turn(session, turn_id, claim_id=""):
             return False
         locked_session.active_turn_id = ""
         locked_session.active_claim_id = ""
-        locked_session.save(update_fields=["active_turn_id", "active_claim_id"])
+        locked_session.active_claimed_at = None
+        locked_session.save(update_fields=["active_turn_id", "active_claim_id", "active_claimed_at"])
     return True
 
 
@@ -197,6 +213,8 @@ def _persist_assistant_response(
     with transaction.atomic():
         locked_session = ChatSession.objects.select_for_update().get(pk=session.pk)
         if turn_id:
+            if locked_session.ended_at is not None:
+                return False
             if cancellation_callback and cancellation_callback():
                 logger.info("Ignoring cancelled assistant response session=%s turn=%s", session.pk, turn_id)
                 return False
@@ -267,8 +285,12 @@ def _persist_assistant_response(
         if turn_id:
             locked_session.active_turn_id = ""
             locked_session.active_claim_id = ""
+            locked_session.active_claimed_at = None
             locked_session.last_completed_turn_id = turn_id
-            update_fields.extend(["active_turn_id", "active_claim_id", "last_completed_turn_id"])
+            update_fields.extend(["active_turn_id", "active_claim_id", "active_claimed_at", "last_completed_turn_id"])
+        if "core_question_state" in debug_info:
+            locked_session.core_question_state = debug_info["core_question_state"]
+            update_fields.append("core_question_state")
         if conversation_complete and locked_session.ended_at is None:
             locked_session.ended_at = timezone.now()
             update_fields.append("ended_at")
@@ -947,6 +969,8 @@ def _chat_dashboard_context(
     user_label,
     force_new,
 ):
+    latest = current_session.messages.order_by("-id").first() if current_session else None
+    pending = latest if latest and latest.sender == ChatMessage.Sender.STUDENT else None
     return {
         "active_prompts": active_prompts,
         "selected_prompt": selected_prompt,
@@ -955,11 +979,13 @@ def _chat_dashboard_context(
         "rendered_messages": _rendered_chat_messages(current_session, user_label),
         "error_message": error_message,
         "force_new": force_new,
+        "pending_message": pending,
     }
 
 
 def _selected_chat_state(request):
-    active_prompts = RolePrompt.objects.filter(is_active=True).order_by("title")
+    active_prompts = RolePrompt.objects.all() if _is_professor(request.user) else RolePrompt.objects.filter(is_active=True)
+    active_prompts = active_prompts.order_by("title")
     sessions = (
         ChatSession.objects.filter(student=request.user)
         .select_related("role_prompt")
@@ -981,6 +1007,10 @@ def _selected_chat_state(request):
             ChatSession.objects.filter(student=request.user).select_related("role_prompt"),
             pk=session_id,
         )
+        if selected_prompt_id and current_session.role_prompt_id != getattr(selected_prompt, "id", None):
+            current_session = sessions.filter(role_prompt=selected_prompt).first()
+        elif current_session.role_prompt and not selected_prompt_id:
+            selected_prompt = current_session.role_prompt
     elif request.GET.get("new") != "1" and selected_prompt:
         current_session = sessions.filter(role_prompt=selected_prompt).first()
 
@@ -1019,7 +1049,7 @@ def _seed_introduction(session):
     if session.messages.filter(sender=ChatMessage.Sender.ASSISTANT).exists():
         return
 
-    scenario = parse_scenario_prompt(session.role_prompt.content)
+    scenario = parse_scenario_prompt(session.scenario_content or session.role_prompt.content)
     introduction = (scenario.introduction or DEFAULT_INTRODUCTION).strip()
     if introduction:
         ChatMessage.objects.create(
@@ -1030,7 +1060,7 @@ def _seed_introduction(session):
 
 
 def _create_chat_session(user, selected_prompt):
-    session = ChatSession.objects.create(student=user, role_prompt=selected_prompt)
+    session = ChatSession.objects.create(student=user, role_prompt=selected_prompt, scenario_content=selected_prompt.content)
     _seed_introduction(session)
     return session
 
@@ -1070,7 +1100,7 @@ def _chat_dashboard(
                 )
                 current_session.ended_at = timezone.now()
                 current_session.save(update_fields=["ended_at"])
-            return redirect(_chat_url(view_name, selected_prompt, new=1))
+            return redirect(_chat_url(view_name, selected_prompt, session=current_session.id) if current_session else _chat_url(view_name, selected_prompt))
 
         if action == "send_message":
             user_text = request.POST.get("message", "").strip()
@@ -1124,6 +1154,8 @@ def _chat_dashboard(
             )
             if turn_status == "pending":
                 error_message = "Please wait for the AI response before sending another message."
+            elif turn_status == "closed":
+                return redirect(_chat_url(view_name, selected_prompt, session=current_session.id))
             elif turn_status == "conflict":
                 error_message = "This turn ID was already used for different message content. Please retry from the chat page."
 
@@ -1147,14 +1179,18 @@ def _chat_dashboard(
 
             try:
                 assistant_text, conversation_complete, debug_info = _generate_assistant_response(
-                    selected_prompt.content,
+                    current_session.scenario_content or selected_prompt.content,
                     current_session.messages.order_by("created_at"),
                     current_session,
                 )
             except Exception:
                 _release_learner_turn(current_session, turn_id, current_session.active_claim_id)
                 logger.exception("Chat response generation failed session=%s turn=%s", current_session.id, turn_id)
-                raise
+                return render(request, template_name, _chat_dashboard_context(
+                    active_prompts, selected_prompt, sessions, current_session,
+                    "The response could not be generated. Your message is saved. Press Retry response; if this continues, contact your instructor.",
+                    user_label, False,
+                ), status=503)
             _persist_assistant_response(
                 current_session,
                 assistant_text,
@@ -1206,7 +1242,7 @@ def professor_test_chat(request):
         template_name="vip/professor_test_chat.html",
         view_name="vip:professor_test_chat",
         user_label="Professor",
-        no_prompt_message="No active prompt is available. Activate at least one prompt first.",
+        no_prompt_message="No scenario is available. Create or upload a scenario first.",
         allow_delete_session=True,
     )
 
@@ -1279,7 +1315,7 @@ def student_message_tts(request, message_id):
     dialogue, embedded_emotion = split_dialogue_and_voice(message.content)
     emotion = getattr(message, "voice_metadata", "") or embedded_emotion
     use_emotion_voice = request.GET.get("emotion", "1") != "0"
-    if use_emotion_voice and not emotion:
+    if not emotion:
         return HttpResponseBadRequest("Audio is not available for this text-only assistant message.")
 
     api_key = _load_api_key()
@@ -1287,35 +1323,20 @@ def student_message_tts(request, message_id):
         return HttpResponseBadRequest("API key is not configured.")
 
     try:
-        if use_emotion_voice:
-            from openai import OpenAI
+        from .speech import SpeechStream
 
-            voice = "coral"
-            if re.search(r"\bmale voice\b", emotion.lower()):
-                voice = "onyx"
-
-            tts_client = OpenAI(api_key=api_key)
-            response = tts_client.audio.speech.create(
-                model="gpt-4o-mini-tts",
-                voice=voice,
-                input=dialogue or "No spoken dialogue.",
-                instructions=emotion or "Speak naturally and clearly.",
-            )
-            audio = response.read()
-            result = HttpResponse(audio, content_type="audio/mpeg")
-            result["Cache-Control"] = "no-store"
-            return result
-
-        from gtts import gTTS
-
-        clean_text = _clean_for_tts(dialogue)
-        audio_buffer = io.BytesIO()
-        tts = gTTS(text=clean_text or "No content", lang="en")
-        tts.write_to_fp(audio_buffer)
-        audio_buffer.seek(0)
-        audio = audio_buffer.read()
-        result = HttpResponse(audio, content_type="audio/mpeg")
+        stream = SpeechStream(
+            api_key,
+            model=os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
+            voice="onyx" if re.search(r"\bmale voice\b", emotion.lower()) else "coral",
+            input=dialogue or "No spoken dialogue.",
+            instructions=emotion if use_emotion_voice else "Speak naturally and clearly.",
+            response_format="mp3",
+        )
+        result = StreamingHttpResponse(stream, content_type="audio/mpeg")
         result["Cache-Control"] = "no-store"
+        result["X-Accel-Buffering"] = "no"
         return result
-    except Exception as exc:
-        return HttpResponseBadRequest(f"TTS error: {exc}")
+    except Exception:
+        logger.exception("Speech generation failed message=%s", message.id)
+        return HttpResponse("Voice is temporarily unavailable. You can continue using text.", status=503)

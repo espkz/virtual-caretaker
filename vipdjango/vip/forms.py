@@ -6,6 +6,11 @@ from .prompt_utils import find_section_by_aliases, normalize_gender, split_markd
 class RolePromptForm(forms.Form):
     title = forms.CharField(max_length=120)
     is_active = forms.BooleanField(required=False)
+    simulation_mode = forms.ChoiceField(
+        choices=[("roleplay", "Patient or family roleplay"), ("clinician_demo", "Clinician demonstration")],
+        initial="roleplay", required=False,
+        help_text="Clinician demonstration answers the human's concerns. Also set the Role, User Role, guidance, and closing for that clinician; this choice does not rewrite them.",
+    )
 
     role = forms.CharField(widget=forms.Textarea(attrs={"rows": 5}))
     background_context = forms.CharField(
@@ -47,7 +52,10 @@ class RolePromptForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 3}),
         help_text="Optional. One cue per line (bullet points are fine).",
     )
-    middle = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 8}))
+    middle = forms.CharField(
+        required=False, widget=forms.Textarea(attrs={"rows": 8}),
+        help_text="For short core-question practice, use a top-level '- Theme' bullet for each theme and indented numbered questions beneath it. The opening counts as the first concern of the first theme. The app selects two concerns per theme and allows one clarification per theme.",
+    )
     middle_to_ending_cues = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
@@ -91,6 +99,7 @@ class RolePromptForm(forms.Form):
             ending = "\n\n".join(value for value in (ending, "End-of-conversation guidance:\n" + legacy_end_cues) if value)
         return {
             "title": title,
+            "simulation_mode": find_section_by_aliases(sections, ["simulation mode"]).strip().lower() or "roleplay",
             "is_active": is_active,
             "role": role,
             "background_context": background,
@@ -126,6 +135,7 @@ class RolePromptForm(forms.Form):
             return f"### {header}\n{(value or '').strip()}\n"
 
         parts = [
+            block("Simulation Mode", data.get("simulation_mode") or "roleplay"),
             block("Role", data.get("role")),
             block("Background and Context", data.get("background_context")),
             block("User Role", data.get("learner_role")),

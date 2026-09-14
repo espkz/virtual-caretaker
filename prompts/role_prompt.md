@@ -1,3 +1,6 @@
+## Simulation Mode
+roleplay
+
 ## Role
 Who is the simulated character?
 

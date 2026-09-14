@@ -18,6 +18,19 @@ class RolePrompt(models.Model):
     def __str__(self):
         return self.title
 
+    @property
+    def uses_core_questions(self):
+        from .conversation_scenario import parse_scenario_prompt
+        from .core_questions import enabled
+        return enabled(parse_scenario_prompt(self.content))
+
+    @property
+    def simulation_mode_label(self):
+        from .conversation_scenario import parse_scenario_prompt
+        if parse_scenario_prompt(self.content).simulation_mode == "clinician_demo":
+            return "Clinician demonstration"
+        return "Core-question practice" if self.uses_core_questions else "Open-ended legacy scenario"
+
 
 class ChatSession(models.Model):
     student = models.ForeignKey(
@@ -36,6 +49,8 @@ class ChatSession(models.Model):
     ended_at = models.DateTimeField(null=True, blank=True)
     conversation_stage = models.CharField(max_length=20, default="beginning")
     conversation_phase = models.CharField(max_length=32, default="normal")
+    scenario_content = models.TextField(blank=True, default="")
+    core_question_state = models.JSONField(default=dict, blank=True)
     completion_status = models.BooleanField(default=False)
     active_objective = models.CharField(max_length=160, blank=True, default="")
     covered_objectives = models.JSONField(default=list, blank=True)
@@ -54,6 +69,7 @@ class ChatSession(models.Model):
     # request is released after an error/cancellation.
     active_turn_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
     active_claim_id = models.CharField(max_length=64, blank=True, default="")
+    active_claimed_at = models.DateTimeField(null=True, blank=True)
     last_completed_turn_id = models.CharField(max_length=64, blank=True, default="")
 
     def __str__(self):

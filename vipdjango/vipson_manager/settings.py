@@ -13,9 +13,12 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR.parent / ".env")
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -36,7 +39,7 @@ SECURE_HSTS_PRELOAD = os.getenv("DJANGO_SECURE_HSTS_PRELOAD", "true").strip().lo
 SECURE_SSL_REDIRECT = os.getenv("DJANGO_SECURE_SSL_REDIRECT", "true").strip().lower() in {"1", "true", "yes", "on"}
 SESSION_COOKIE_SECURE = os.getenv("DJANGO_SESSION_COOKIE_SECURE", "true").strip().lower() in {"1", "true", "yes", "on"}
 CSRF_COOKIE_SECURE = os.getenv("DJANGO_CSRF_COOKIE_SECURE", "true").strip().lower() in {"1", "true", "yes", "on"}
-if os.getenv("DJANGO_SECURE_PROXY_SSL_HEADER", "true").strip().lower() in {"1", "true", "yes", "on"}:
+if os.getenv("DJANGO_SECURE_PROXY_SSL_HEADER", "false").strip().lower() in {"1", "true", "yes", "on"}:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 

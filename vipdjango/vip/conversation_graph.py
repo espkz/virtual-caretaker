@@ -3,10 +3,9 @@ from typing import Any, Callable, TypedDict
 from langgraph.graph import END, StateGraph
 
 
-TARGET_TURNS = 20
-# A safety cap is still useful, but it is deliberately separate from the
-# approximate target. Reaching TARGET_TURNS must never complete a scenario.
-MAX_TURNS = TARGET_TURNS + 4
+TARGET_TURNS = 10
+# ConversationEngine emits a character-side pause on the final allowed turn.
+MAX_TURNS = 20
 _STAGE_ORDER = {"beginning": 0, "middle": 1, "ending": 2}
 
 

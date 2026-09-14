@@ -45,6 +45,7 @@ class Scenario:
     objectives: tuple[ScenarioObjective, ...] = ()
     background_context: str = ""
     topics: tuple[ScenarioTopic, ...] = ()
+    simulation_mode: str = "roleplay"
 
     def to_state(self):
         state = asdict(self)
@@ -88,6 +89,7 @@ def parse_scenario_prompt(role_text: str) -> Scenario:
     voice_style = section(["voice style", "voice instructions"]) or "speak naturally and clearly"
     middle = section(["middle", "conversation progression: middle"])
     return Scenario(
+        simulation_mode=section(["simulation mode"]).lower() or "roleplay",
         character=section(["role", "role summary", "character"]) or role_text.strip(),
         background_context=section(["background and context", "background", "context"]),
         learner=section(["learner role", "user role"]) or DEFAULT_LEARNER_ROLE,

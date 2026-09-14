@@ -1,177 +1,75 @@
-# Conversation pipeline
+﻿# Conversation pipeline
 
-This document describes the active Django conversation engine. The older standalone implementation and legacy prompts are kept under `archived/` for reference; they are not part of the runtime described here.
-
-## At a glance
+## Request flow
 
 ```text
-Role prompt (database or prompts/*.md)
-        |
-        v
-parse_scenario_prompt -> Scenario and parsed topic/objective guidance
-        |
-        v
-Browser POST or terminal input
-        |
-        v
-ConversationEngine.respond
-        |
-        v
-LangGraph: initialize -> generate -> finalize
-        |
-        v
-System prompt + labeled conversation history
-        |
-        v
-OpenAI structured response
-        |
-        v
-Validate stage, progress, role ownership, ending, and voice metadata
-        |
-        +--> Django: ChatMessage / ChatSession -> browser -> optional TTS
-        |
-        +--> Terminal tester: in-memory transcript -> optional JSON save
+Browser login / selected scenario
+    -> ChatSession (immutable scenario_content snapshot)
+    -> saved Introduction (text only)
+    -> learner POST with retry ID
+    -> locked session claim + saved learner message
+    -> ConversationEngine.respond
+         -> explicit stop / 20-turn boundary
+         -> clinician demonstration for an explicit clinician_demo mode
+         -> fixed Opening Line for family/patient scenarios
+         -> core-question practice for Middle themes with numbered examples
+         -> legacy LangGraph generation otherwise
+    -> assistant text + voice style + state, committed together
+    -> redirect to transcript; optional streaming audio request
 ```
 
-The engine returns dialogue and voice metadata separately. The application owns fixed introduction/opening text and persistence; the model supplies natural in-character turns and structured progress signals.
+Both the browser and `testing/manual_conversation.py` call the same engine and carry state into subsequent turns. The terminal tester has no database or audio. Its debug snapshot becomes the next call's conversation state.
 
-## Main files
+## Scenario parsing
 
-- `vipdjango/vip/views.py` contains the HTTP entry points, session/message persistence, prompt loading, and TTS response path
-- `vipdjango/vip/conversation_engine.py` parses each scenario, builds model context, calls OpenAI, and normalizes the model result
-- `vipdjango/vip/conversation_graph.py` defines the request-scoped LangGraph state and lifecycle nodes
-- `vipdjango/vip/conversation_scenario.py` turns role-prompt Markdown into a structured `Scenario`
-- `vipdjango/vip/prompt_utils.py` normalizes headings and resolves section aliases
-- `vipdjango/vip/models.py` stores `RolePrompt`, `ChatSession`, and `ChatMessage`
-- `prompts/global_prompt.md` contains shared character, role-ownership, style, progression, and ending rules
-- `prompts/role_prompt.md` is the authoring template; `prompts/role_*.md` are checked-in scenario examples
-- `testing/manual_conversation.py` is the terminal-only text-chat harness
-- `vipdjango/vip/tests/` contains automated unit and Django tests, not the manual harness
+`conversation_scenario.py` and `prompt_utils.py` parse Markdown aliases for character, learner, background, introduction, opening, stages, objectives, closing, and voice. A top-level `- Theme` bullet in Middle with indented numbered questions becomes a `ScenarioTopic` with `possible_expressions`. Both Rachel files use this format and match the supplied Core Questions document.
 
-## Where a conversation begins
+Editing a RolePrompt affects new sessions. Migration 0011 snapshots existing sessions' current prompt content; it cannot reconstruct earlier edits made before migration. `load_scenarios` imports the examples as inactive drafts without overwriting existing prompts. Faculty can test drafts before activation.
 
-There are two entry paths, and both use `ConversationEngine`.
+## Core-question practice
 
-### Browser path
+`core_questions.py` owns progression. The model's schema has only `answer_status`, `reaction`, and `question_id`. It has no generated spoken dialogue, role field, or completion flag.
 
-1. `student_dashboard()` or `professor_test_chat()` delegates to `_chat_dashboard()` in `views.py`.
-2. The selected `RolePrompt` is loaded from the database. Its `content` is the scenario prompt.
-3. Creating a session calls `_create_chat_session()`, which calls `_seed_introduction()`. The parsed scenario Introduction is stored as the first assistant `ChatMessage` with no voice metadata, so it is application-owned text and is not sent to TTS.
-4. A learner submits `action=send_message`. `_accept_learner_turn()` locks the `ChatSession`, creates or reuses the learner message, and prevents duplicate in-flight turns.
-5. `_generate_assistant_response()` passes the ordered session messages and the persisted session state to `ConversationEngine.respond()`.
+1. The opening counts as the first concern of the first theme. Its canonical first example is excluded from later selection to avoid immediately repeating that concern.
+2. On each learner reply, `_assess_core_reply()` supplies all themes, background, goals, the pending concern, remaining candidates, and labeled history to the configured model. Native user/assistant roles remain intact; the application-owned introduction is excluded.
+3. The model classifies the reply as addressed, unclear, or unsafe and selects an available question ID that fits the conversation and avoids already-explained material. This is conversational guidance, not a validated clinical score.
+4. An unclear/unsafe reply gets at most one clarification opportunity per theme. A concern still unresolved after the available repair is recorded, and the conversation advances. Such sessions receive a support-seeking closing.
+5. The application selects an unused question in the current theme, falling back to the first available candidate if the ID is invalid. It prefixes one of four fixed reactions. Untrusted free text is never spoken.
+6. Two concerns per theme move practice forward. The final question must receive a learner reply before closing. The three-theme Rachel scenarios finish in 7-10 learner submissions, including greeting, final answer, and any clarifications.
+7. Normal completion uses the scenario Closing only if no answered concern remains flagged unresolved. Otherwise it uses a fixed support-seeking closing. Prior unresolved flags are conservative: later replies are not automatically treated as repairing unrelated earlier concerns.
 
-Text and microphone submissions use this same server path. Speech recognition happens before the POST; TTS happens after the completed assistant response is persisted.
+`core_question_state` records asked IDs, pending question, themes that used a clarification, and unresolved question IDs. Existing topic fields record discussion progress for compatibility. Counts indicate practice exposure, not competency. State is committed atomically with the assistant row. Older transcripts lacking this state are recovered conservatively from identifiable authored questions; start a fresh session when switching a class to the new workflow.
 
-### Terminal path
+The question bank, opening, closing, and fixed reactions are the only spoken content in this mode. This bounds hallucination/role drift at the output level but reduces free-form dialogue. Model question selection and answer classification can still be imperfect. Faculty review remains necessary for educational validity.
 
-`testing/manual_conversation.py` reads a selected `prompts/role_*.md` file, loads `prompts/global_prompt.md`, and calls the same `ConversationEngine.respond()` used by the Django view. It keeps an in-memory list of `Message` objects and saves a JSON transcript under `test_conversations/` when requested or when a conversation completes. It does not start Django, use the database, or generate audio.
+## Clinician demonstration
 
-## How learner input enters the engine
+`Scenario.simulation_mode` defaults to `roleplay` for existing prompts. An explicit `## Simulation Mode` value of `clinician_demo` dispatches to `clinician_demo.py` before the fixed family opening and core-question/legacy branches. Its clinician-specific system instructions replace the family global prompt. It uses the existing covered-topic and readiness fields to persist discussion progress, with separate clinician closing and output checks. The scenario editor and downloaded Markdown preserve the mode. See [CLINICIAN_DEMO.md](CLINICIAN_DEMO.md) for the Scenario 2 role mapping, limits, and verification.
 
-`ConversationEngine.respond(role_text, messages, conversation_state=...)` first parses the role prompt and counts learner messages.
+## Legacy generative scenarios
 
-- With zero learner messages, it returns the scenario Introduction, or `DEFAULT_INTRODUCTION` when the prompt has none
-- On the first learner turn, it returns the scenario Opening Line when one exists and has not already been emitted
-- Later turns build a graph input from the parsed scenario, the labeled transcript, the persisted state, and the current learner-turn count
+Prompts without question examples retain the existing initialize -> generate -> finalize LangGraph. The engine assembles shared prompting, identities, background, active stage guidance, all Middle/Ending guidance, objectives, topics, and transcript memory. Its structured response supplies dialogue, voice, stage, completion, stop intent, and progress.
 
-The browser supplies `conversation_state` from `ChatSession`. The terminal harness currently supplies no database state; it relies on its in-memory transcript and the engine's history-derived topic checks. Its debug state is displayed and saved, but is not fed back as a persisted session snapshot.
+Normalization checks forward stages, role-drift markers, repeated questions, progress IDs, and voice style. Candidate endings may use a separate semantic verifier. These are heuristic safeguards around generated text; they do not have the closed-vocabulary guarantees of core-question practice. The prompt table labels these **Open-ended legacy scenario**. Use the imported core-question versions for the reported classroom exercise.
 
-## Scenario parsing and state
+`TARGET_TURNS` is 10 and `MAX_TURNS` is 20. Before either path calls the model at the 20th learner submission, the engine emits a character-side pause and completes. Standalone stop commands work even before the opening. A learner saying "stop the feeding pump" is scenario dialogue, not a standalone session-stop command. The Close Conversation button works at any point.
 
-`parse_scenario_prompt()` uses `split_markdown_sections()` and alias matching rather than requiring one exact heading spelling. It extracts:
+## Persistence and recovery
 
-- character identity and background context
-- learner role
-- Introduction and Opening Line
-- Beginning, Middle, and Ending guidance
-- beginning-to-middle and middle-to-ending cues
-- optional conversation objectives
-- concrete topic clusters parsed from Middle bullets
-- Closing and voice settings
+`views.py` accepts one learner turn at a time. A retry ID maps to one learner row and at most one assistant row through a database uniqueness constraint. The session claim has a unique worker ID and timestamp. After 90 seconds a retry can reclaim an abandoned request; a stale worker cannot commit or release a newer claim. API timeout/retry settings are bounded below that lease in the core-question path.
 
-The immutable `Scenario` is converted to a dictionary with `Scenario.to_state()` before entering LangGraph.
+Provider failures release the claim without inserting an error as character dialogue. After failure or reload the page displays the saved learner text as read-only with **Retry response**, preserving its turn ID. Closing during generation prevents a late response from committing. PostgreSQL supplies production row locking; SQLite serves local single-user development and isolated tests, not concurrent-class verification.
 
-For the browser, `ChatSession` persists the state that must survive requests:
+## Browser speech
 
-- `conversation_stage`, `conversation_phase`, and `completion_status`
-- active, covered, and unresolved objectives
-- active, covered, and unresolved topics plus topic turn counts
-- `recent_topics` and `ending_ready`
-- the active learner-turn claim and last completed turn ID
+Student and instructor templates share `vip/static/vip/chat.js`. Text forms work without JavaScript. Supported browsers use Speech Recognition for microphone input; the student reviews the recognized text before sending. Controls handle unavailable recognition, denied access, blocked storage, duplicate sends, and autoplay restrictions.
 
-`ChatMessage` stores the transcript. Assistant dialogue is in `content`; normalized voice instructions are in `voice_metadata`; and `turn_id` ties one learner message to its assistant response.
+The voice request authorizes ownership of the saved assistant message; introductions remain text-only. `SpeechStream` opens `audio.speech.with_streaming_response.create` and forwards MP3 chunks through Django `StreamingHttpResponse`. It closes the provider response and client on completion, failure, or disconnect. Upstream errors before headers become a generic 503; mid-stream failures terminate playback, and the browser offers text/retry. `X-Accel-Buffering: no` asks the proxy to avoid buffering. Audible latency also depends on browser buffering and the network.
 
-## LangGraph lifecycle
+Expressive and neutral styles use the configured OpenAI TTS model. Replay reuses the audio element's source where possible; no cross-user or durable audio cache is implemented. Stop cancels the current stream. Text generation still completes before TTS starts, and normal message submission still reloads the transcript page.
 
-`build_conversation_graph()` creates three nodes:
+## Configuration and tests
 
-1. `initialize` validates the turn budget, normalizes objective progress, selects defaults, and computes the pressure phase. `TARGET_TURNS` is 20 and `MAX_TURNS` is 24; the target is guidance, while the maximum is an operational safety limit.
-2. `generate` calls the injected response function, currently `ConversationEngine._llm_turn()`. It accepts only a valid forward stage and carries response, completion, voice, progress, and debug fields into state.
-3. `finalize` recomputes `turns_remaining` and preserves the semantic completion result. It does not manufacture a closing because a turn counter was reached.
+Root `.env` loads without overriding exported variables. `OPENAI_CHAT_MODEL` defaults to `gpt-4.1-mini`; `OPENAI_TTS_MODEL` defaults to `gpt-4o-mini-tts`. The chat client has a 30-second timeout and one SDK retry; speech has a 30-second timeout with no SDK retry. The core classifier sets `store=False` and uses a bounded response schema.
 
-Turn count selects pressure phases (`normal`, `resolution_guidance`, `closure_preference`, and `closure_flexibility`). It does not directly select Beginning, Middle, or Ending.
-
-## Prompt construction and model call
-
-`views._extract_template_prefix()` loads `prompts/global_prompt.md`. `ConversationEngine._system_prompt()` combines that shared contract with parsed scenario reference data and the current state. The raw role-prompt Markdown is not appended to the model request; it is parsed first, and only the relevant fields below are included. The system message includes:
-
-- immutable simulated-character and learner identities
-- relevant background context
-- the active stage guidance and its transition cues
-- objective and topic progress
-- recent learner topics and derived answered-question memory
-- voice instructions, lifecycle phase, and turn-budget pressure
-- the JSON output contract
-
-`_history()` converts persisted `ChatMessage` objects to native API roles: learner messages become `user`, and character messages become `assistant`. It removes only legacy trailing voice annotations from assistant dialogue, omits the application-owned Introduction, and prefixes serialized content with generic `LEARNER:` or `SIMULATED CHARACTER:` labels. Native API roles remain intact.
-
-`_request_llm_turn()` sends one system message followed by that history to `OpenAI.responses.create()`. The latest learner turn is the final native `user` message and appears once. The request uses a strict JSON schema with dialogue, voice, stage, completion/stop flags, objective fields, topic fields, and ending readiness. `ConversationEngine` lazily creates and reuses one OpenAI client within the request object.
-
-## Response processing
-
-`_llm_turn()` processes the structured result in this order:
-
-1. A structured `stop_requested` result can end the conversation immediately without adding character dialogue.
-2. Proposed stages are validated against Beginning → Middle → Ending; regressions and unknown values are rejected.
-3. “Other questions” requests are checked against the remaining topic ledger. If the model does not ask a real remaining question, the engine supplies a bounded topic fallback.
-4. Obvious role drift is replaced with a character-side topic fallback. A question that lexically repeats an already answered character concern is also blocked and redirected.
-5. Objective and topic IDs are validated. Covered progress is monotonic, topic turn counts are application-owned, and unresolved topics cannot be silently discarded by a malformed model result.
-6. Candidate endings can receive a separate conservative semantic ending check. Phrase matching only decides whether to attempt that check; it does not decide completion by itself.
-7. Dialogue is separated from any legacy embedded voice annotation. Voice metadata is normalized to `male voice, ...` or `female voice, ...` and stored separately.
-8. Completion is accepted only when the model requests it at Ending with a forward transition and the configured progress is ready. A scenario Closing replaces the generated dialogue only for a valid completion.
-
-The model can advance early, address multiple concerns in one turn, or continue past the soft target. Reaching 20 turns does not end a conversation. The browser refuses new non-retry turns at the 24-turn safety limit; an explicit user “close conversation” action can also end a session.
-
-## Persistence, rendering, and termination
-
-After `ConversationEngine.respond()` returns, `_persist_assistant_response()` writes the assistant row, updates `ChatSession` stage/phase/progress fields, clears the learner-turn claim, and sets `ended_at` when completion is true. The browser then redirects back to the chat page.
-
-`_rendered_chat_messages()` removes legacy embedded voice annotations for display. `student_message_tts()` reads the stored dialogue and voice metadata and generates one complete audio response after the model response is complete. The Introduction remains text-only.
-
-The terminal tester stops when the engine reports completion, or when the user enters `/stop`, sends EOF, or presses Ctrl-C. `/save` writes the current transcript; `/status` shows the current debug snapshot; `/help` lists commands.
-
-## Where to make changes
-
-- Prompt wording and shared role behavior: `prompts/global_prompt.md`
-- Scenario identity, background, goals, stages, cues, and closing: database `RolePrompt.content` or the Markdown files in `prompts/`
-- Markdown heading/field parsing: `vipdjango/vip/prompt_utils.py` and `conversation_scenario.py`
-- Prompt assembly and model output schema: `ConversationEngine._system_prompt()` and `_request_llm_turn()` in `conversation_engine.py`
-- Topic/objective progression and response guards: the progress helpers and `_llm_turn()` in `conversation_engine.py`
-- Request lifecycle and stage/turn state: `conversation_graph.py`
-- Database persistence and browser/TTS behavior: the chat helpers in `views.py` and `ChatSession`/`ChatMessage` in `models.py`
-- Manual text testing: `testing/manual_conversation.py`
-
-Keep prompt behavior changes separate from state/progression changes when possible. The automated tests under `vipdjango/vip/tests/` cover both layers and are the quickest regression check.
-
-## Useful local commands
-
-From the repository root, after activating the virtual environment and exporting the required environment variables:
-
-```bash
-python vipdjango/manage.py migrate
-python vipdjango/manage.py test vip.tests
-python testing/manual_conversation.py
-python testing/manual_conversation.py --scenario prompts/role_rachel_ellison_1.md --verbose
-```
-
-The manual tester requires `OPENAI_API_KEY` (or its explicit `--api-key` option). The Django server additionally requires `DJANGO_SECRET_KEY`; see `README.md` for local setup and the HTTP security flags used by `runserver`.
+See [README.md](README.md) for commands, [TESTING.md](TESTING.md) for results, and [DEPLOYMENT.md](DEPLOYMENT.md) for the Windows and school-server handoff.
