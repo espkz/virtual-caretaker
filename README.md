@@ -8,7 +8,7 @@ The Django application is responsible for authentication, role-prompt management
 
 **Reversed roles:** Scenario 2 also has a [clinician demonstration mode](CLINICIAN_DEMO.md), with the AI playing the hospice nurse and the human playing Rachel. Import that separate draft with `python vipdjango/manage.py load_scenarios --clinician-demo`, then select **Scenario 2: AI hospice nurse (you play Rachel)** in instructor Test Chat. Margaret remains the noncommunicating patient.
 
-The two Rachel scenarios now use bounded **core-question practice**: roughly two instructor-authored concerns per theme, at most one clarification per theme, and an explicit closing after the final answer. Spoken content is constrained to those questions and short application-owned reactions. A model selects question IDs and assesses whether an answer needs clarification; it cannot invent dialogue or control the turn budget. These scenarios normally finish in 7–10 learner submissions. Older unstructured prompts retain their generative conversation path, with a 20-submission hard stop for all scenarios. Use the imported core-question drafts for the short classroom exercise.
+The two Rachel scenarios use **guided scenario practice**: natural family-member dialogue grounded in the full faculty scenarios, with concern tracking and up to **20 learner messages plus 20 Rachel replies** (the introductory screen does not count). Nurse questions receive direct answers; specific follow-ups replace canned clarification. Topic pacing reserves time for all three themes and a final readiness check. The application closes by exchange 20 and permits earlier success only after coverage, repair, and readiness checks. See [faculty feedback fixes and rollout](FACULTY_FEEDBACK_FIXES.md). Import the revised prompts with `python manage.py load_scenarios --faculty-feedback`, activate those drafts in the instructor dashboard, and start new sessions.
 
 ## Project structure
 
@@ -30,7 +30,7 @@ vipdjango/
   requirements.txt                  Python dependencies
   vip/
     conversation_engine.py          Prompt assembly, model call, response guards
-    core_questions.py               Bounded question selection and closing
+    core_questions.py               Guided dialogue, concern tracking, and closing
     clinician_demo.py               AI clinician dialogue and readiness handling
     speech.py                       Streaming TTS with disconnect cleanup
     conversation_graph.py           LangGraph lifecycle and request state

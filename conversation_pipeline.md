@@ -11,8 +11,8 @@ Browser login / selected scenario
     -> ConversationEngine.respond
          -> explicit stop / 20-turn boundary
          -> clinician demonstration for an explicit clinician_demo mode
-         -> fixed Opening Line for family/patient scenarios
-         -> core-question practice for Middle themes with numbered examples
+         -> fixed Opening Line for legacy family/patient scenarios
+         -> guided scenario practice for Middle themes with numbered examples
          -> legacy LangGraph generation otherwise
     -> assistant text + voice style + state, committed together
     -> redirect to transcript; optional streaming audio request
@@ -22,25 +22,22 @@ Both the browser and `testing/manual_conversation.py` call the same engine and c
 
 ## Scenario parsing
 
-`conversation_scenario.py` and `prompt_utils.py` parse Markdown aliases for character, learner, background, introduction, opening, stages, objectives, closing, and voice. A top-level `- Theme` bullet in Middle with indented numbered questions becomes a `ScenarioTopic` with `possible_expressions`. Both Rachel files use this format and match the supplied Core Questions document.
+`conversation_scenario.py` and `prompt_utils.py` parse Markdown aliases for character, learner, background, introduction, opening, stages, objectives, closing, and voice. A top-level `- Theme` bullet in Middle with indented numbered questions becomes a `ScenarioTopic` with `possible_expressions`. Both Rachel files use this format, expanded with the supplied full faculty scenarios.
 
-Editing a RolePrompt affects new sessions. Migration 0011 snapshots existing sessions' current prompt content; it cannot reconstruct earlier edits made before migration. `load_scenarios` imports the examples as inactive drafts without overwriting existing prompts. Faculty can test drafts before activation.
+Editing a RolePrompt affects new sessions. Migration 0011 snapshots existing sessions' current prompt content; it cannot reconstruct earlier edits made before migration. `load_scenarios` imports the examples as inactive drafts without overwriting existing prompts. Review drafts before activation; Instructor Test Chat lists active prompts.
 
-## Core-question practice
+## Guided scenario practice
 
-`core_questions.py` owns progression. The model's schema has only `answer_status`, `reaction`, and `question_id`. It has no generated spoken dialogue, role field, or completion flag.
+`core_questions.py` owns the turn budget, concern ledger, and completion. A single structured model request produces both Rachel’s dialogue and its assessment. The request includes all parsed scenario sections (including hidden conditional responses), the transcript, known/asked/answered concerns, and the remaining budget.
 
-1. The opening counts as the first concern of the first theme. Its canonical first example is excluded from later selection to avoid immediately repeating that concern.
-2. On each learner reply, `_assess_core_reply()` supplies all themes, background, goals, the pending concern, remaining candidates, and labeled history to the configured model. Native user/assistant roles remain intact; the application-owned introduction is excluded.
-3. The model classifies the reply as addressed, unclear, or unsafe and selects an available question ID that fits the conversation and avoids already-explained material. This is conversational guidance, not a validated clinical score.
-4. An unclear/unsafe reply gets at most one clarification opportunity per theme. A concern still unresolved after the available repair is recorded, and the conversation advances. Such sessions receive a support-seeking closing.
-5. The application selects an unused question in the current theme, falling back to the first available candidate if the ID is invalid. It prefixes one of four fixed reactions. Untrusted free text is never spoken.
-6. Two concerns per theme move practice forward. The final question must receive a learner reply before closing. The three-theme Rachel scenarios finish in 7-10 learner submissions, including greeting, final answer, and any clarifications.
-7. Normal completion uses the scenario Closing only if no answered concern remains flagged unresolved. Otherwise it uses a fixed support-seeking closing. Prior unresolved flags are conservative: later replies are not automatically treated as repairing unrelated earlier concerns.
+- Dialogue answers the nurse first; invitations to explain understanding or feelings have their own assessment category.
+- Approximately 10–12 concerns can be explored across the full question banks. Questions already answered ahead of time are omitted; a later repair can clear an earlier unresolved concern.
+- The scheduler reserves roughly six exchanges per theme and the final two for understanding/readiness. After two concerns have been raised, adjacent-theme choices let Rachel follow the nurse into a new topic earlier. After two follow-ups on a pending concern, it instructs the character to advance while recording unresolved issues. It does not require asking every example question.
+- Known IDs, allowed next concerns, role/dose checks, and duplicate-output checks constrain generated output. Rejected dialogue gets one rewrite with a 15-second timeout and no provider retries; further invalid output uses the existing user retry workflow without committing dialogue or progress. At the final turn, invalid dialogue produces a deterministic pause instead. These checks are heuristics, not a guarantee against hallucination.
+- Successful completion requires coverage of all themes, no recorded unresolved concern, and a model-reported readiness check quoted from the latest nurse message. The scenario supplies the final successful line. At turn 20 Rachel answers briefly, asks no new question, and pauses if readiness has not been established.
+- `core_question_state` retains legacy fields and adds addressed IDs, per-concern follow-up counts, active theme, and current turn. No schema migration is required. Old state is upgraded in memory; fresh sessions are recommended for the revised scenarios.
 
-`core_question_state` records asked IDs, pending question, themes that used a clarification, and unresolved question IDs. Existing topic fields record discussion progress for compatibility. Counts indicate practice exposure, not competency. State is committed atomically with the assistant row. Older transcripts lacking this state are recovered conservatively from identifiable authored questions; start a fresh session when switching a class to the new workflow.
-
-The question bank, opening, closing, and fixed reactions are the only spoken content in this mode. This bounds hallucination/role drift at the output level but reduces free-form dialogue. Model question selection and answer classification can still be imperfect. Faculty review remains necessary for educational validity.
+The old six-question completion rule and fixed clarification/reaction vocabulary have been removed. Generated conversation must still be reviewed by faculty for scenario fidelity and educational quality.
 
 ## Clinician demonstration
 
@@ -50,9 +47,9 @@ The question bank, opening, closing, and fixed reactions are the only spoken con
 
 Prompts without question examples retain the existing initialize -> generate -> finalize LangGraph. The engine assembles shared prompting, identities, background, active stage guidance, all Middle/Ending guidance, objectives, topics, and transcript memory. Its structured response supplies dialogue, voice, stage, completion, stop intent, and progress.
 
-Normalization checks forward stages, role-drift markers, repeated questions, progress IDs, and voice style. Candidate endings may use a separate semantic verifier. These are heuristic safeguards around generated text; they do not have the closed-vocabulary guarantees of core-question practice. The prompt table labels these **Open-ended legacy scenario**. Use the imported core-question versions for the reported classroom exercise.
+Normalization checks forward stages, role-drift markers, repeated questions, progress IDs, and voice style. Candidate endings may use a separate semantic verifier. These are heuristic safeguards around generated text. The prompt table labels these **Open-ended legacy scenario**. Use the revised guided scenarios for the classroom exercise.
 
-`TARGET_TURNS` is 10 and `MAX_TURNS` is 20. Before either path calls the model at the 20th learner submission, the engine emits a character-side pause and completes. Standalone stop commands work even before the opening. A learner saying "stop the feeding pump" is scenario dialogue, not a standalone session-stop command. The Close Conversation button works at any point.
+`TARGET_TURNS` and `MAX_TURNS` are 20. Guided family scenarios answer the 20th learner message before the application ends the session. Legacy and clinician modes retain their deterministic boundary pause. Standalone stop commands and the Close Conversation button still end immediately; “stop the feeding pump” is scenario dialogue, not a session-stop command.
 
 ## Persistence and recovery
 
