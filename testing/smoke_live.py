@@ -141,7 +141,10 @@ def check_family_scenarios(key, record):
         state, messages, durations = {}, [], []
         for turn in range(1, 21):
             pending = state.get("core_question_state", {}).get("pending")
-            reply = REPLIES[number][pending["theme"]] if pending else "Hello, I'm your nurse today. I'd like to hear your concerns before we begin."
+            theme = pending["theme"] if pending else state.get("core_question_state", {}).get("active_theme", 0)
+            reply = REPLIES[number][theme] if turn > 1 else "Hello, I'm your nurse today. I'd like to hear your concerns before we begin."
+            if turn >= 18:
+                reply += " What do you understand about what we have discussed, and do you feel ready to begin?"
             messages.append(SimpleNamespace(sender="student", content=reply))
             record("human_message", scenario=number, turn=turn, text=reply)
             started = perf_counter()
@@ -153,7 +156,7 @@ def check_family_scenarios(key, record):
             print(f"Scenario {number}, turn {turn}: {state['reason']} ({durations[-1]}s)", flush=True)
             if complete:
                 break
-        if not complete or turn > 10:
+        if not complete or turn > 20:
             raise AssertionError("Bounded practice did not complete as expected")
         report["scenarios"].append({"scenario": number, "turns": turn, "reason": state["reason"], "seconds_per_turn": durations, "counts": state.get("topic_turn_counts")})
     started = perf_counter()
