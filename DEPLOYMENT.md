@@ -50,15 +50,15 @@ On macOS/Linux use `python3 -m venv .venv`, then `.venv/bin/python` in place of 
 
 For the reversed Scenario 2 role assignment (AI nurse, human Rachel), see [CLINICIAN_DEMO.md](CLINICIAN_DEMO.md). Import its separate draft with `load_scenarios --clinician-demo`; it does not replace the AI-Rachel scenarios.
 
-1. In **Prompts**, choose **Test** beside each imported Rachel scenario. Instructors can test an inactive draft. Students cannot access drafts.
-2. Test both a reasonable conversation and an evasive/incorrect one. The prompt table distinguishes **Core-question practice** from **Open-ended legacy scenario**.
-3. Activate the reviewed core-question scenarios. Deactivate superseded versions to keep the student list clear. Importing files does not update or replace existing database prompts; `load_scenarios` deliberately leaves existing rows unchanged.
+1. Import the full-scenario revision with `python manage.py load_scenarios --faculty-feedback`. This creates two inactive **September 2026 revision** drafts and preserves existing database prompts.
+2. Review those drafts in **Prompts**, then activate them for testing. Instructor Test Chat lists active prompts. The prompt table distinguishes **Guided scenario practice** from **Open-ended legacy scenario**.
+3. Test reasonable, incomplete, and misleading conversations. Use fresh sessions so they snapshot the revised prompts. Deactivate superseded versions when switching the class to the revision.
 4. In **Student Accounts**, create the class and add/import students into that named class. An account left in **Unassigned** cannot enter the student chat. Existing initial-password behavior uses NetID; communicate credentials privately and have students change their password in Account Settings. These are Django accounts, not automatically university SSO accounts.
 5. Students log in, select a scenario, and start a new chat. They can type, or use the microphone and review the transcription before sending. Voice playback is optional; the UI identifies it as AI voice. They can stop at any time and download their transcript. Faculty can review student logs.
 
-For core-question practice, use a top-level theme bullet and indented numbered questions in the **Middle** section, as in the Rachel files. The opening raises the first theme's first concern; do not use an unrelated opening with this format. Questions, opening, and closing are instructor-authored spoken text. The model selects among remaining question IDs and four short reactions; it does not generate additional clinical statements. The mode trades free-form emotional dialogue for predictable, bounded practice. Review that tradeoff with the teaching team when approving the lesson.
+For guided scenario practice, use top-level theme bullets and indented numbered concerns in **Middle**, plus the full background and conditional reactions. Rachel generates dialogue around those concerns and answers questions from the nurse. Progress tracking, role checks, and a 20-exchange ceiling constrain the conversation; faculty review is still required for scenario fidelity.
 
-Two concerns per theme (including the opening) produce six concerns in these scenarios. Each theme can get one clarification, so the normal length is 7–10 learner submissions including the greeting and final answer. There is a 20-submission hard stop for all scenarios. Unresolved answers lead to a support-seeking closing, not a readiness claim. A closure is the end of practice, **not a competency score**. Five minutes is a pacing aim: typing/speaking speed, pauses, and network conditions still affect duration.
+Sessions allow up to 20 learner messages and 20 character replies, excluding the introductory screen. They can finish earlier after genuine readiness or an explicit stop. The six-question completion rule is removed. Unresolved concerns lead to a pause at the limit rather than a false readiness claim. Completion is not a competency score. See [the feedback breakdown and verification](FACULTY_FEEDBACK_FIXES.md).
 
 ## Updating the existing school installation
 

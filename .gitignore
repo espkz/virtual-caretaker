@@ -1,6 +1,12 @@
 # Local secrets and environment files
 api_key.txt
 env.txt
+openai.json
+django_key.txt
+.env
+.env.*
+!.env.example
+vipdjango/staticfiles/
 users.txt
 
 # Local databases

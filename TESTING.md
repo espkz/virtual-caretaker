@@ -1,3 +1,23 @@
+# September 2026 faculty-feedback revision
+
+Current behavior and verification are documented in [FACULTY_FEEDBACK_FIXES.md](FACULTY_FEEDBACK_FIXES.md). The earlier 7–10 submission, fixed-dialogue design described below is historical and has been replaced.
+
+Run offline regression tests:
+
+```bash
+python vipdjango/manage.py test vip.tests --settings=vipson_manager.test_settings --noinput
+```
+
+Replay the four faculty transcripts against the configured model (requires API access and incurs usage):
+
+```bash
+python testing/replay_faculty_feedback.py --live --output sessions/faculty_feedback_replay.jsonl
+```
+
+This replays original nurse lines with newly generated Rachel replies. Review the new dialogue manually: later nurse messages may refer to questions from the old transcript. It does not replace a fresh interactive faculty test.
+
+---
+
 # Verification and usability assessment
 
 The subsequent [Scenario 2 clinician demonstration](CLINICIAN_DEMO.md) adds 17 regression tests (40 total), a second Chrome workflow test, and its own live conversation/role/dose checks. The original repair results below describe the AI-Rachel mode.
