@@ -7,6 +7,9 @@ Who is the simulated character?
 ## Background and Context
 What does the character know, believe, feel, and experience?
 
+## Meta Instructions
+Optional author guidance about character behavior, boundaries, and response handling. This is internal reference guidance, not spoken dialogue or instructions for the learner.
+
 ## User Role
 Who is the human participant?
 

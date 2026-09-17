@@ -22,6 +22,14 @@ class RolePromptForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 8}),
         help_text="Scenario facts, circumstances, beliefs, feelings, and experiences.",
     )
+    meta_instructions = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 10}),
+        help_text=(
+            "Optional author guidance for the character's behavior and response boundaries. "
+            "This is reference guidance, not spoken dialogue."
+        ),
+    )
     learner_role = forms.CharField(
         widget=forms.Textarea(attrs={"rows": 3}),
         help_text="Who is the human participant in this simulation.",
@@ -103,13 +111,11 @@ class RolePromptForm(forms.Form):
         if not role:
             role = (content or "").strip()
         background = find_section_by_aliases(sections, ["background and context", "background", "context"])
-        introduction = find_section_by_aliases(sections, ["introduction", "introduction: greeting"])
-        legacy_meta = find_section_by_aliases(
+        meta_instructions = find_section_by_aliases(
             sections,
-            ["meta instructions", "meta-instructions", "meta instruction", "notes"],
+            ["meta instructions", "meta-instructions", "meta instruction", "notes", "constraints", "rules"],
         )
-        if legacy_meta:
-            background = "\n\n".join(value for value in (background, "Scenario constraints:\n" + legacy_meta) if value)
+        introduction = find_section_by_aliases(sections, ["introduction", "introduction: greeting"])
         ending = find_section_by_aliases(
             sections,
             ["ending", "end", "conversation progression: end", "conversation progression: ending"],
@@ -123,6 +129,7 @@ class RolePromptForm(forms.Form):
             "is_active": is_active,
             "role": role,
             "background_context": background,
+            "meta_instructions": meta_instructions,
             "learner_role": find_section_by_aliases(sections, ["learner role", "user role"]),
             "introduction": introduction,
             "conversation_objectives": find_section_by_aliases(
@@ -163,6 +170,7 @@ class RolePromptForm(forms.Form):
             block("Simulation Mode", data.get("simulation_mode") or "roleplay"),
             block("Role", data.get("role")),
             block("Background and Context", data.get("background_context")),
+            block("Meta Instructions", data.get("meta_instructions")),
             block("User Role", data.get("learner_role")),
             block("Conversation Goals", data.get("conversation_objectives")),
             block("Introduction", data.get("introduction")),

@@ -470,6 +470,7 @@ class PromptVoiceConfigurationTests(SimpleTestCase):
             introduction_voice_id="voice_narrator",
             roleplay_voice_id="voice_character",
             voice_style="soft spoken",
+            meta_instructions="Stay in character and keep author guidance out of spoken dialogue.",
         )
         choices = [("voice_narrator", "Narrator Name"), ("voice_character", "Character Name")]
         form = RolePromptForm(data=data, voice_choices=choices)
@@ -478,9 +479,38 @@ class PromptVoiceConfigurationTests(SimpleTestCase):
         self.assertIn("## Introduction Voice\nvoice_narrator", rendered)
         self.assertIn("## Roleplay Voice\nvoice_character", rendered)
         self.assertNotIn("## Voice Gender", rendered)
+        self.assertIn(
+            "## Meta Instructions\nStay in character and keep author guidance out of spoken dialogue.",
+            rendered,
+        )
         parsed = parse_scenario_prompt(rendered)
         self.assertEqual(parsed.introduction_voice_id, "voice_narrator")
         self.assertEqual(parsed.roleplay_voice_id, "voice_character")
+        self.assertEqual(
+            parsed.meta,
+            "Stay in character and keep author guidance out of spoken dialogue.",
+        )
+
+    def test_meta_instructions_are_optional_and_reopen_in_their_own_field(self):
+        data = RolePromptForm.initial_from_content(scenario_text(), title="Optional meta")
+        data["meta_instructions"] = ""
+        form = RolePromptForm(
+            data=data,
+            voice_choices=[("voice_intro_test", "Narrator"), ("voice_roleplay_test", "Character")],
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+        data["meta_instructions"] = "Keep character-side constraints separate from background facts."
+        form = RolePromptForm(
+            data=data,
+            voice_choices=[("voice_intro_test", "Narrator"), ("voice_roleplay_test", "Character")],
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        reopened = RolePromptForm.initial_from_content(form.render_markdown_content())
+        self.assertEqual(
+            reopened["meta_instructions"],
+            "Keep character-side constraints separate from background facts.",
+        )
 
     def test_voice_style_rejects_long_or_control_like_descriptions(self):
         data = RolePromptForm.initial_from_content(scenario_text(), title="Bad style")
@@ -506,8 +536,9 @@ class PromptVoiceConfigurationTests(SimpleTestCase):
     def test_every_editor_content_field_is_required(self):
         form = RolePromptForm()
         for name, field in form.fields.items():
-            if name != "is_active":
+            if name not in {"is_active", "meta_instructions"}:
                 self.assertTrue(field.required, name)
+        self.assertFalse(form.fields["meta_instructions"].required)
 
 class PromptVoicePreviewViewTests(TestCase):
     def setUp(self):
@@ -534,6 +565,7 @@ class PromptVoicePreviewViewTests(TestCase):
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200)
             self.assertContains(response, 'class="voice-preview-control"', count=2)
+            self.assertContains(response, "Meta Instructions")
             self.assertContains(response, "Alex")
             self.assertContains(response, "Zara")
             self.assertContains(response, "https://preview.example/alex.mp3")

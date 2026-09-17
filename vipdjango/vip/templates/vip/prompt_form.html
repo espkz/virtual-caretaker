@@ -146,9 +146,10 @@
 <div class="prompt-layout">
     <section class="panel">
         <h2>Prompt Builder</h2>
-        <p class="muted"><span class="required-mark">*</span> All prompt fields are required. Incomplete prompts remain inactive and cannot be tested.</p>
+        <p class="muted"><span class="required-mark">*</span> Required fields are marked. Meta instructions are optional. Incomplete prompts remain inactive and cannot be tested.</p>
         <div class="tabs">
             <button type="button" class="tab-btn{% if not form.introduction.errors %} active{% endif %}" data-tab="builder-tab">Builder</button>
+            <button type="button" class="tab-btn" data-tab="meta-instructions-tab">Meta Instructions</button>
             <button type="button" class="tab-btn{% if form.introduction.errors %} active{% endif %}" data-tab="introduction-tab">Introduction</button>
             <button type="button" class="tab-btn" data-tab="preview-tab">Live Preview</button>
             <button type="button" class="tab-btn" data-tab="markdown-tab">Full Markdown</button>
@@ -310,6 +311,19 @@
                 </div>
             </div>
 
+            <div class="tab-panel" id="meta-instructions-tab">
+                <h3>Meta Instructions</h3>
+                <p class="preview-note">Optional character-side guidance used by the conversation engine. It is not shown as dialogue and should not be written as instructions for the learner.</p>
+                <div class="field">
+                    <label for="{{ form.meta_instructions.id_for_label }}">Meta Instructions</label>
+                    {{ form.meta_instructions }}
+                    {% if form.meta_instructions.help_text %}
+                    <p class="preview-note">{{ form.meta_instructions.help_text }}</p>
+                    {% endif %}
+                    {% if form.meta_instructions.errors %}<div class="errors">{{ form.meta_instructions.errors }}</div>{% endif %}
+                </div>
+            </div>
+
             <div class="tab-panel{% if form.introduction.errors %} active{% endif %}" id="introduction-tab">
                 <h3>Introduction</h3>
                 <div class="field">
@@ -349,6 +363,7 @@
         "id_simulation_mode",
         "id_role",
         "id_background_context",
+        "id_meta_instructions",
         "id_learner_role",
         "id_introduction",
         "id_conversation_objectives",
@@ -486,6 +501,7 @@
             section("Simulation Mode", getValue("id_simulation_mode") || "roleplay") +
             section("Role", getValue("id_role")) +
             section("Background and Context", getValue("id_background_context")) +
+            section("Meta Instructions", getValue("id_meta_instructions")) +
             section("User Role", getValue("id_learner_role")) +
             section("Conversation Goals", getValue("id_conversation_objectives")) +
             section("Introduction", getValue("id_introduction")) +

@@ -96,6 +96,78 @@ class CorePracticeTests(SimpleTestCase):
         self.assertTrue(complete)
         self.assertEqual(state["reason"], "learner_stop")
 
+    def test_topic_eligible_roleplay_defaults_to_core_question_path(self):
+        engine = ConversationEngine("", "test")
+        transcript = [message("student", "Hello")]
+        opening, complete, state = engine.respond(scenario_text(), transcript)
+        self.assertFalse(complete)
+        transcript.append(message("assistant", opening))
+        transcript.append(message("student", "I am ready to answer your concern."))
+
+        with patch.object(engine, "_assess_core_reply", return_value=selection()) as core_model:
+            with patch.object(engine, "_request_llm_turn") as general_model:
+                _, complete, state = engine.respond(scenario_text(), transcript, state)
+
+        self.assertFalse(complete)
+        core_model.assert_called_once()
+        general_model.assert_not_called()
+        self.assertEqual(state["reason"], "core_question")
+
+    def test_roleplay_without_parsed_topics_uses_general_llm_graph(self):
+        role_text = """
+## Simulation Mode
+roleplay
+
+## Role
+You are a character who is worried but willing to talk.
+
+## Background and Context
+The character has a personal concern.
+
+## User Role
+The human participant is a nurse.
+
+## Introduction
+Welcome to the simulation.
+
+## Conversation Stages
+
+### Beginning
+Respond naturally to the nurse's latest message.
+
+### Middle
+Continue the conversation based on unresolved concerns.
+
+### Ending
+Wrap up when the conversation reaches a natural endpoint.
+
+## Closing
+Thank you. I am ready to continue.
+""".strip()
+        engine = ConversationEngine("", "test")
+        result = {
+            "dialogue": "[worried] I am still concerned.",
+            "stage": "beginning",
+            "stage_transition_ready": False,
+            "complete": False,
+            "stop_requested": False,
+            "active_objective": "",
+            "covered_objectives": [],
+            "unresolved_objectives": [],
+            "ending_ready": False,
+            "active_topic": "",
+            "covered_topics": [],
+            "unresolved_topics": [],
+        }
+        with patch.object(engine, "_request_llm_turn", return_value=result) as general_model:
+            with patch.object(engine, "_assess_core_reply") as core_model:
+                _, complete, state = engine.respond(role_text, [message("student", "Hello")])
+
+        self.assertFalse(complete)
+        general_model.assert_called_once()
+        core_model.assert_not_called()
+        self.assertEqual(state["reason"], "llm_turn")
+
     def test_twenty_turn_cap_closes_even_legacy_scenario_without_api(self):
         engine = ConversationEngine("", "test")
         for text in (scenario_text(), "## Role\nYou are a worried patient."):
