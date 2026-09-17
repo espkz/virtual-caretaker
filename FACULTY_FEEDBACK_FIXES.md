@@ -1,3 +1,39 @@
+# September 17 follow-up — sessions 62 and 63
+
+## Email-ready update
+
+Thank you for testing again. I reviewed sessions 62 and 63 and made the following adjustments:
+
+1. **Five more exchanges:** conversations now allow up to **25 nurse messages and 25 Rachel replies**, excluding the introductory screen. They can still finish earlier when Rachel is ready or you choose to stop.
+2. **More varied questions:** each new conversation gets a randomized question plan. Rachel starts with a concern appropriate to the opening situation, then can move among relevant themes. This varies the sample on repeat attempts while keeping the conversation coherent. Refreshing an existing conversation preserves its plan; start a new conversation for a new sequence.
+3. **Less repetition:** Rachel is instructed to accept reasonable explanations, brief confirmations, and honest offers to check information. After a reasonable explanation, she moves directly to the selected faculty question without a generated recap. When asked a question, she answers it without automatically repeating her previous question. A genuinely unclear or unsafe statement can receive one focused follow-up.
+4. **Cleaner endings:** removed the repeated pause statement at the end of the transcripts.
+
+The updated scenarios will appear as **“September 17, 2026 revision”** after importing and activating them. Please select those versions and start fresh conversations for the next test.
+
+## Verification for this follow-up
+
+- 64 automated tests pass, including the 25-exchange engine and database workflow, stable randomized plans, variation across new sessions, eligible-theme sampling, repeat-question prevention, direct answers to nurse questions, and duplicate closing prevention.
+- Additional live checks of the final version were blocked by automatic approval review because they send the revised scenario prompts and synthetic dialogue to the configured external API (`api.openai.com`). These checks require approval before proceeding. No final-version live quality or latency claim is made.
+- A preliminary replay of sessions 62 and 63 helped reveal that generated question wording could disagree with its selected ID. The final implementation now speaks the selected faculty question directly, retaining generated answers to questions from the nurse. The preliminary transcript is not validation of that final fix.
+- Django reports no missing migrations; checks of the tracked changes found no whitespace errors.
+- Dialogue and assessment still depend on the model. Randomization varies the sample; it does not guarantee that two attempts will never share a question. The clinical progression is retained rather than randomly jumping into unrelated topics.
+
+## Deploy and import this follow-up
+
+From the project directory on the server:
+
+```bash
+./manual_update.sh
+podman exec virtual-caretaker python manage.py load_scenarios --faculty-feedback-v2
+```
+
+Review and activate the two **September 17, 2026 revision** drafts. This import preserves the previous revisions and any instructor edits. Existing sessions retain their scenario snapshots; use fresh sessions. The command runs inside the container where Django and the deployed database configuration are available. No additional database migration is required.
+
+---
+
+The September 15 work and its verification are retained below as historical context. The follow-up above replaces its 20-exchange limit and routine follow-up policy.
+
 # Faculty feedback fixes — September 2026
 
 ## Reply email draft

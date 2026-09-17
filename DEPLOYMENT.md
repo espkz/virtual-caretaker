@@ -50,15 +50,15 @@ On macOS/Linux use `python3 -m venv .venv`, then `.venv/bin/python` in place of 
 
 For the reversed Scenario 2 role assignment (AI nurse, human Rachel), see [CLINICIAN_DEMO.md](CLINICIAN_DEMO.md). Import its separate draft with `load_scenarios --clinician-demo`; it does not replace the AI-Rachel scenarios.
 
-1. Import the full-scenario revision with `python manage.py load_scenarios --faculty-feedback`. This creates two inactive **September 2026 revision** drafts and preserves existing database prompts.
+1. Import the full-scenario revision with `python manage.py load_scenarios --faculty-feedback-v2`. This creates two inactive **September 17, 2026 revision** drafts and preserves existing database prompts.
 2. Review those drafts in **Prompts**, then activate them for testing. Instructor Test Chat lists active prompts. The prompt table distinguishes **Guided scenario practice** from **Open-ended legacy scenario**.
 3. Test reasonable, incomplete, and misleading conversations. Use fresh sessions so they snapshot the revised prompts. Deactivate superseded versions when switching the class to the revision.
 4. In **Student Accounts**, create the class and add/import students into that named class. An account left in **Unassigned** cannot enter the student chat. Existing initial-password behavior uses NetID; communicate credentials privately and have students change their password in Account Settings. These are Django accounts, not automatically university SSO accounts.
-5. Students log in, select a scenario, and start a new conversation in a fixed Voice or Text mode. Text mode stays text-only. Voice mode plays a narrator introduction, then runs as a continuous call with mute and end controls. Students can stop at any time and download their transcript. Faculty can review student logs.
+5. Students log in, select a scenario, and start a new chat. They can type, or use the microphone and review the transcription before sending. Voice playback is optional; the UI identifies it as AI voice. They can stop at any time and download their transcript. Faculty can review student logs.
 
-For guided scenario practice, use top-level theme bullets and indented numbered concerns in **Middle**, plus the full background and conditional reactions. Rachel generates dialogue around those concerns and answers questions from the nurse. Progress tracking, role checks, and a 20-exchange ceiling constrain the conversation; faculty review is still required for scenario fidelity.
+For guided scenario practice, use top-level theme bullets and indented numbered concerns in **Middle**, plus the full background and conditional reactions. Rachel generates dialogue around those concerns and answers questions from the nurse. Progress tracking, role checks, and a 25-exchange ceiling constrain the conversation; faculty review is still required for scenario fidelity.
 
-Sessions allow up to 20 learner messages and 20 character replies, excluding the introductory screen. They can finish earlier after genuine readiness or an explicit stop. The six-question completion rule is removed. Unresolved concerns lead to a pause at the limit rather than a false readiness claim. Completion is not a competency score. See [the feedback breakdown and verification](FACULTY_FEEDBACK_FIXES.md).
+Sessions allow up to 25 learner messages and 25 character replies, excluding the introductory screen. They can finish earlier after genuine readiness or an explicit stop. The six-question completion rule is removed. Unresolved concerns lead to a pause at the limit rather than a false readiness claim. Completion is not a competency score. See [the feedback breakdown and verification](FACULTY_FEEDBACK_FIXES.md).
 
 ## Updating the existing school installation
 
@@ -67,7 +67,7 @@ The following is a server-administrator handoff, not a claim that these commands
 1. Identify the running application version and back up its database and server configuration. Rehearse against a staging copy. Preserve the production Django secret and credentials.
 2. Deploy the source, including `prompts/`, migrations, and `vip/static/`. Exclude `.env`, `openai.json`, `django_key.txt`, `.venv`, local SQLite databases, and test transcripts. Never upload the local database over the school's database.
 3. Install `vipdjango/requirements.txt` in the server environment, or build `Containerfile`. Set production environment variables through the hosting platform. The container's entrypoint runs migrations and `collectstatic` before Gunicorn starts; for a non-container installation run those commands yourself before restarting workers. For multiple replicas, run migrations once as a release step.
-4. Apply migrations through **0018**. Migration 0012 adds the `VoiceConversation` provider-to-Django-session mapping used by optional ElevenLabs live voice practice; later voice migrations add the durable introduction and mute gates and remove the obsolete pause field. Existing transcripts/accounts remain. Scenario edits thereafter affect new sessions; saved sessions retain the content they began with.
+4. Apply migration **0011**. It adds core-question progress, an expiring request claim, and a scenario snapshot for each session. Existing transcripts/accounts remain. Scenario edits thereafter affect new sessions; saved sessions retain the content they began with.
 5. Run `python manage.py load_scenarios` from `vipdjango/`. This adds inactive copies only. Test them with faculty, activate the reviewed copies, and have students start new sessions. The older database prompts do not inherit the updated Markdown just because code was uploaded.
 6. Check login, student/class assignment, both scenarios, instructor draft access, transcript downloads, retry after a provider failure, and audio over the real HTTPS URL. Run a class-sized concurrent rehearsal to establish capacity and API limits before scheduling students. The local smoke tests did not establish class-scale capacity or clinical assessment validity.
 
@@ -78,9 +78,6 @@ DJANGO_SECRET_KEY=<preserve-the-existing-production-secret>
 OPENAI_API_KEY=<server-api-key>
 OPENAI_CHAT_MODEL=gpt-4.1-mini
 OPENAI_TTS_MODEL=gpt-4o-mini-tts
-ELEVENLABS_API_KEY=<server-only-elevenlabs-api-key>
-ELEVENLABS_SPEECH_ENGINE_ID=seng_<configured-resource-id>
-SPEECH_ENGINE_PORT=3001
 DJANGO_DEBUG=false
 DJANGO_ALLOWED_HOSTS=<exact-chatbot-hostname>
 DJANGO_CSRF_TRUSTED_ORIGINS=https://<exact-chatbot-hostname>
@@ -111,14 +108,6 @@ gunicorn vipson_manager.wsgi:application --bind 0.0.0.0:8080 --workers 3 --timeo
 ```
 
 The bind address belongs behind the school's proxy/firewall. Your administrator should adapt it to the existing service manager/platform. Copying Python files alone does not migrate the database, rebuild static files, or restart the running application.
-
-Optional live voice practice requires one additional supervised process, not an ASGI change to Gunicorn:
-
-```bash
-python manage.py run_speech_engine --port 3001
-```
-
-It accepts authenticated upstream WebSocket connections from ElevenLabs at `/ws`; expose a stable public `wss://` route to that port and configure that route on the Speech Engine resource. The provider-facing SDK verifies incoming provider JWTs by default and this deployment must retain that check. See [SPEECH_ENGINE.md](SPEECH_ENGINE.md) for resource setup, tunnel development instructions, browser-token security, and validation.
 
 ## Verification performed
 
