@@ -23,7 +23,7 @@ them in the ignored repository-root `env.txt` file:
 ```dotenv
 ELEVENLABS_API_KEY=<server-only-elevenlabs-api-key>
 ELEVENLABS_SPEECH_ENGINE_ID=seng_<external-speech-engine-id>
-SPEECH_ENGINE_PORT=3001
+SPEECH_ENGINE_PORT=8081
 # Optional; defaults to 600 seconds (10 minutes). This is the explicit
 # provider session cap shown to the learner if it is reached.
 ELEVENLABS_SPEECH_ENGINE_MAX_DURATION_SECONDS=600
@@ -90,10 +90,10 @@ Consequently narrator audio, initial room noise, and Mute cannot create a
 2. Start the separate authenticated adapter:
 
    ```bash
-   python vipdjango/manage.py run_speech_engine --port 3001 --debug
+   python vipdjango/manage.py run_speech_engine --port 8081 --debug
    ```
 
-3. Expose it with TLS, for example `ngrok http 3001`, then set the resulting
+3. Expose it with TLS, for example `ngrok http 8081`, then set the resulting
    `wss://.../ws` URL on the externally managed Speech Engine resource.
 
 4. After a deploy that changes `vip/speech_engine/adapter.py`, restart the

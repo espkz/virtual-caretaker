@@ -3,9 +3,9 @@ from typing import Any, Callable, TypedDict
 from langgraph.graph import END, StateGraph
 
 
-TARGET_TURNS = 10
+TARGET_TURNS = 25
 # ConversationEngine emits a character-side pause on the final allowed turn.
-MAX_TURNS = 20
+MAX_TURNS = 25
 _STAGE_ORDER = {"beginning": 0, "middle": 1, "ending": 2}
 
 

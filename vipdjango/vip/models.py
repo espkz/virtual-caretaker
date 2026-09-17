@@ -49,7 +49,7 @@ class RolePrompt(models.Model):
         from .conversation_scenario import parse_scenario_prompt
         if parse_scenario_prompt(self.content).simulation_mode == "clinician_demo":
             return "Clinician demonstration"
-        return "Core-question practice" if self.uses_core_questions else "Open-ended legacy scenario"
+        return "Guided scenario practice" if self.uses_core_questions else "Open-ended legacy scenario"
 
 
 class ChatSession(models.Model):

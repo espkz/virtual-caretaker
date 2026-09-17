@@ -462,7 +462,10 @@
     async function finalizeAndShowTranscript({failed = false} = {}) {
         const finalized = await finalizeVoiceCall({failed});
         if (!finalized) return false;
-        setStatus("Ended", failed
+        // Keep an unexpected-close indicator visible through finalization.
+        // The saved-session page uses the same durable error state, so this
+        // must not be briefly replaced with a successful-looking status.
+        setStatus(failed ? "Error" : "Ended", failed
             ? "The voice connection ended unexpectedly. Opening the saved transcript."
             : "The voice conversation has ended. Opening the saved transcript.");
         openSavedTranscriptPage();

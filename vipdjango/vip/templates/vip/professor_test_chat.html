@@ -137,10 +137,10 @@
                 <div class="call-stage">
                     <div class="call-orb" aria-hidden="true"></div>
                     <output id="voice-connection-status" class="call-status" aria-live="polite">
-                        {% if current_session and current_session.ended_at %}Ended{% elif not voice_enabled %}Error{% else %}Ready to connect{% endif %}
+                        {% if current_session and current_session.ended_at %}{% if voice_call_failed %}Error{% else %}Ended{% endif %}{% elif not voice_enabled %}Error{% else %}Ready to connect{% endif %}
                     </output>
                     <p id="voice-state-detail" class="muted">
-                        {% if current_session and current_session.ended_at %}This saved voice conversation has ended.{% elif not voice_enabled %}Voice is not configured on this server. The saved transcript remains available.{% else %}Your microphone will start after the simulation introduction.{% endif %}
+                        {% if voice_call_failed %}The voice connection ended unexpectedly. The saved transcript is available.{% elif current_session and current_session.ended_at %}This saved voice conversation has ended.{% elif not voice_enabled %}Voice is not configured on this server. The saved transcript remains available.{% else %}Your microphone will start after the simulation introduction.{% endif %}
                     </p>
                     {% if not current_session or not current_session.ended_at %}
                     <button type="button" id="voice-start" class="primary" {% if not voice_enabled %}disabled{% endif %}>Start Call</button>
@@ -149,10 +149,10 @@
                         <button type="button" id="voice-end" class="danger">☎ End Call</button>
                     </div>
                     {% endif %}
-                    <div id="voice-connection-lost" class="connection-lost" role="alert" hidden>
+                    <div id="voice-connection-lost" class="connection-lost" role="alert"{% if not voice_call_failed %} hidden{% endif %}>
                         <strong>Connection lost</strong>
                         <span>The voice connection ended unexpectedly. Your saved transcript is available.</span>
-                        <button type="button" id="voice-open-saved-transcript" class="primary" disabled>Open saved transcript</button>
+                        <button type="button" id="voice-open-saved-transcript" class="primary"{% if not voice_call_failed %} disabled{% endif %}>Open saved transcript</button>
                     </div>
                 </div>
 

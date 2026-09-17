@@ -1,5 +1,7 @@
+import asyncio
 import json
 from pathlib import Path
+import re
 import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,6 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from vip import views
+from vip.conversation_engine import ConversationEngine
 from vip.models import ChatMessage, ChatSession, RolePrompt, SpeechEngineVoiceResource, VoiceConversation
 from vip.conversation_scenario import parse_scenario_prompt
 from vip.forms import RolePromptForm
@@ -27,13 +30,17 @@ from vip.speech_engine.service import (
 
 def scenario_text():
     content = (Path(settings.BASE_DIR).parent / "prompts" / "role_rachel_ellison_1.md").read_text(encoding="utf-8")
-    return ("## Simulation Mode\nroleplay\n\n" + content).replace(
-        "## Introduction Voice\n\n",
-        "## Introduction Voice\nvoice_intro_test\n\n",
-    ).replace(
-        "## Roleplay Voice\n\n",
-        "## Roleplay Voice\nvoice_roleplay_test\n\n",
+    content = re.sub(
+        r"(?m)^(## Introduction Voice\n)[^\n]*$",
+        r"\1voice_intro_test",
+        content,
     )
+    content = re.sub(
+        r"(?m)^(## Roleplay Voice\n)[^\n]*$",
+        r"\1voice_roleplay_test",
+        content,
+    )
+    return "## Simulation Mode\nroleplay\n\n" + content
 
 
 class VoicePracticeViewTests(TestCase):
@@ -336,6 +343,28 @@ class VoicePracticeViewTests(TestCase):
             )
         )
 
+    def test_saved_error_keeps_the_error_indicator_after_the_voice_session_closes(self):
+        voice_call = VoiceConversation.objects.create(
+            chat_session=self.chat_session,
+            status=VoiceConversation.Status.ERROR,
+            ended_at=timezone.now(),
+            failure_reason="Voice connection ended unexpectedly.",
+        )
+        self.chat_session.ended_at = timezone.now()
+        self.chat_session.save(update_fields=["ended_at"])
+
+        response = self.client.get(
+            reverse("vip:student_dashboard"),
+            {"prompt": self.prompt.id, "session": self.chat_session.id},
+        )
+
+        self.assertEqual(response.context["voice_call_failed"], True)
+        rendered = response.content.decode()
+        self.assertIn('id="voice-connection-status" class="call-status"', rendered)
+        self.assertRegex(rendered, r'id="voice-connection-status"[^>]*>\s*Error\s*</output>')
+        self.assertIn('id="voice-connection-lost" class="connection-lost" role="alert">', rendered)
+        self.assertIn("The voice connection ended unexpectedly. The saved transcript is available.", rendered)
+
     def test_mute_state_is_persisted_without_changing_conversation_state(self):
         voice_call = VoiceConversation.objects.create(chat_session=self.chat_session)
         muted = self.post_json(
@@ -449,6 +478,65 @@ class SpeechEngineTranscriptGateTests(TransactionTestCase):
         generate_response.assert_called_once()
         self.assertEqual(chat_session.messages.filter(sender=ChatMessage.Sender.STUDENT).count(), 1)
         speech_session.send_response.assert_awaited_once_with("[calm] First roleplay response.")
+
+    @patch(
+        "vip.speech_engine.adapter._generate_and_persist_voice_response",
+        return_value="[calm] First roleplay response.",
+    )
+    def test_replayed_provider_event_is_ignored_even_if_transcript_content_changes(self, generate_response):
+        user = get_user_model().objects.create_user("replayed-event-learner", password="test")
+        user.groups.add(Group.objects.create(name="Class: Replayed event"))
+        prompt = RolePrompt.objects.create(title="Replayed event scenario", content=scenario_text(), is_active=True)
+        chat_session = views._create_chat_session(user, prompt, ChatSession.InteractionMode.VOICE)
+        VoiceConversation.objects.create(
+            chat_session=chat_session,
+            provider_conversation_id="conv_replayed_event",
+            introduction_completed_at=timezone.now(),
+        )
+        speech_session = SimpleNamespace(
+            conversation_id="conv_replayed_event",
+            _current_event_id=185,
+            send_response=AsyncMock(),
+        )
+        first = [
+            SimpleNamespace(role="user", content="First turn"),
+            SimpleNamespace(role="agent", content="[calm] Reply"),
+            SimpleNamespace(role="user", content="..."),
+        ]
+        replay = [
+            SimpleNamespace(role="user", content="First turn"),
+            SimpleNamespace(role="agent", content="[calm] Reply"),
+            SimpleNamespace(role="user", content="The corrected final transcript"),
+        ]
+
+        adapter = SpeechEngineAdapter()
+        async_to_sync(adapter.on_transcript)(first, speech_session)
+        async_to_sync(adapter.on_transcript)(replay, speech_session)
+
+        generate_response.assert_called_once()
+        self.assertEqual(chat_session.messages.filter(sender=ChatMessage.Sender.STUDENT).count(), 1)
+        self.assertEqual(chat_session.messages.filter(sender=ChatMessage.Sender.STUDENT).get().content, "...")
+        speech_session.send_response.assert_awaited_once_with("[calm] First roleplay response.")
+
+    def test_clean_provider_disconnect_is_not_recorded_as_an_error(self):
+        user = get_user_model().objects.create_user("adapter-clean-disconnect-learner", password="test")
+        user.groups.add(Group.objects.create(name="Class: Adapter clean disconnect"))
+        prompt = RolePrompt.objects.create(title="Clean disconnect scenario", content=scenario_text(), is_active=True)
+        chat_session = views._create_chat_session(user, prompt, ChatSession.InteractionMode.VOICE)
+        voice_call = VoiceConversation.objects.create(
+            chat_session=chat_session,
+            provider_conversation_id="conv_clean_disconnect",
+        )
+        speech_session = SimpleNamespace(
+            conversation_id="conv_clean_disconnect",
+            _ws=SimpleNamespace(close_code=1000, close_reason=""),
+        )
+
+        async_to_sync(SpeechEngineAdapter().on_disconnect)(speech_session)
+
+        voice_call.refresh_from_db()
+        self.assertEqual(voice_call.status, VoiceConversation.Status.ENDED)
+        self.assertEqual(voice_call.failure_reason, "")
 
 
 class PromptVoiceConfigurationTests(SimpleTestCase):
@@ -706,7 +794,7 @@ class SpeechEngineVoiceResourceTests(TestCase):
         )
 
 
-class SpeechEngineAdapterTests(TestCase):
+class SpeechEngineAdapterTests(TransactionTestCase):
     def test_socket_close_diagnostics_include_provider_close_code_and_reason(self):
         code, reason = speech_engine_adapter._socket_close_details(
             SimpleNamespace(_ws=SimpleNamespace(close_code=1006, close_reason="network transport lost"))
@@ -723,7 +811,175 @@ class SpeechEngineAdapterTests(TestCase):
             SimpleNamespace(role="user", content="Same words"),
         ]
         self.assertNotEqual(adapter._turn_id("conv_123", first), adapter._turn_id("conv_123", second))
+        self.assertEqual(adapter._turn_id("conv_123", first, 185), adapter._turn_id("conv_123", second, 185))
+        self.assertNotEqual(adapter._turn_id("conv_123", first, 185), adapter._turn_id("conv_123", second, 186))
         self.assertEqual(adapter._latest_user_text(second), "Same words")
+
+    def test_provider_event_id_is_available_for_connection_level_deduplication(self):
+        adapter = SpeechEngineAdapter()
+        speech_session = SimpleNamespace(_current_event_id=185)
+        self.assertEqual(adapter._provider_event_id(speech_session), 185)
+        self.assertIsNone(adapter._provider_event_id(SimpleNamespace()))
+
+    def test_interrupted_voice_event_can_be_replaced_by_the_next_provider_revision(self):
+        user = get_user_model().objects.create_user("interrupted-revision-learner", password="test")
+        user.groups.add(Group.objects.create(name="Class: Interrupted revision"))
+        prompt = RolePrompt.objects.create(title="Interrupted revision scenario", content=scenario_text(), is_active=True)
+        chat_session = views._create_chat_session(user, prompt, ChatSession.InteractionMode.VOICE)
+        VoiceConversation.objects.create(
+            chat_session=chat_session,
+            provider_conversation_id="conv_interrupted_revision",
+            introduction_completed_at=timezone.now(),
+        )
+        speech_session = SimpleNamespace(
+            conversation_id="conv_interrupted_revision",
+            _current_event_id=489,
+            send_response=AsyncMock(),
+        )
+        first = [SimpleNamespace(role="user", content="The first provider revision")]
+        second = [SimpleNamespace(role="user", content="The corrected provider revision")]
+        adapter = SpeechEngineAdapter()
+
+        with patch(
+            "vip.speech_engine.adapter._generate_and_persist_voice_response",
+            side_effect=asyncio.CancelledError,
+        ):
+            with self.assertRaises(asyncio.CancelledError):
+                async_to_sync(adapter.on_transcript)(first, speech_session)
+
+        speech_session._current_event_id = 490
+        with patch(
+            "vip.speech_engine.adapter._generate_and_persist_voice_response",
+            return_value="[calm] Recovered response.",
+        ) as retry_generate:
+            async_to_sync(adapter.on_transcript)(second, speech_session)
+
+        retry_generate.assert_called_once()
+        self.assertEqual(chat_session.messages.filter(sender=ChatMessage.Sender.STUDENT).count(), 1)
+        self.assertEqual(
+            chat_session.messages.filter(sender=ChatMessage.Sender.STUDENT).get().content,
+            "The corrected provider revision",
+        )
+        speech_session.send_response.assert_awaited_once_with("[calm] Recovered response.")
+
+    def test_new_provider_event_supersedes_an_orphaned_voice_claim(self):
+        """A replacement event must not wait for a cancelled worker's DB cleanup."""
+        user = get_user_model().objects.create_user("orphaned-claim-learner", password="test")
+        user.groups.add(Group.objects.create(name="Class: Orphaned claim"))
+        prompt = RolePrompt.objects.create(title="Orphaned claim scenario", content=scenario_text(), is_active=True)
+        chat_session = views._create_chat_session(user, prompt, ChatSession.InteractionMode.VOICE)
+        VoiceConversation.objects.create(
+            chat_session=chat_session,
+            provider_conversation_id="conv_orphaned_claim",
+            introduction_completed_at=timezone.now(),
+        )
+        _, status, _ = views._accept_learner_turn(
+            chat_session,
+            "The transcript before the interrupted callback",
+            "eleven_orphaned_316",
+        )
+        self.assertEqual(status, "accepted")
+        speech_session = SimpleNamespace(
+            conversation_id="conv_orphaned_claim",
+            _current_event_id=317,
+            send_response=AsyncMock(),
+        )
+
+        with patch(
+            "vip.speech_engine.adapter._generate_assistant_response",
+            return_value=("[calm] Replacement response.", False, {"voice_metadata": ""}),
+        ):
+            async_to_sync(SpeechEngineAdapter().on_transcript)(
+                [SimpleNamespace(role="user", content="The corrected finalized transcript")],
+                speech_session,
+            )
+
+        chat_session.refresh_from_db()
+        self.assertEqual(chat_session.active_turn_id, "")
+        self.assertEqual(chat_session.messages.filter(sender=ChatMessage.Sender.STUDENT).count(), 1)
+        self.assertEqual(
+            chat_session.messages.get(sender=ChatMessage.Sender.STUDENT).content,
+            "The corrected finalized transcript",
+        )
+        self.assertEqual(
+            chat_session.messages.get(sender=ChatMessage.Sender.ASSISTANT).content,
+            "[calm] Replacement response.",
+        )
+        speech_session.send_response.assert_awaited_once_with("[calm] Replacement response.")
+
+    def test_consecutive_finalized_voice_turns_each_persist_and_dispatch_once(self):
+        user = get_user_model().objects.create_user("consecutive-voice-learner", password="test")
+        user.groups.add(Group.objects.create(name="Class: Consecutive voice"))
+        prompt = RolePrompt.objects.create(title="Consecutive voice scenario", content=scenario_text(), is_active=True)
+        chat_session = views._create_chat_session(user, prompt, ChatSession.InteractionMode.VOICE)
+        VoiceConversation.objects.create(
+            chat_session=chat_session,
+            provider_conversation_id="conv_consecutive_voice",
+            introduction_completed_at=timezone.now(),
+        )
+        speech_session = SimpleNamespace(
+            conversation_id="conv_consecutive_voice",
+            _current_event_id=317,
+            send_response=AsyncMock(),
+        )
+        adapter = SpeechEngineAdapter()
+
+        with patch(
+            "vip.speech_engine.adapter._generate_assistant_response",
+            side_effect=[
+                ("[calm] First response.", False, {"voice_metadata": ""}),
+                ("[calm] Second response.", False, {"voice_metadata": ""}),
+            ],
+        ) as generate:
+            async_to_sync(adapter.on_transcript)(
+                [SimpleNamespace(role="user", content="First voice turn")],
+                speech_session,
+            )
+            speech_session._current_event_id = 318
+            async_to_sync(adapter.on_transcript)(
+                [
+                    SimpleNamespace(role="user", content="First voice turn"),
+                    SimpleNamespace(role="agent", content="[calm] First response."),
+                    SimpleNamespace(role="user", content="Second voice turn"),
+                ],
+                speech_session,
+            )
+
+        chat_session.refresh_from_db()
+        self.assertEqual(generate.call_count, 2)
+        self.assertEqual(chat_session.active_turn_id, "")
+        self.assertEqual(chat_session.messages.filter(sender=ChatMessage.Sender.STUDENT).count(), 2)
+        self.assertEqual(chat_session.messages.filter(sender=ChatMessage.Sender.ASSISTANT).count(), 2)
+        self.assertEqual(speech_session.send_response.await_count, 2)
+
+    @patch(
+        "vip.speech_engine.adapter._generate_and_persist_voice_response",
+        return_value="[calm] One response.",
+    )
+    def test_distinct_provider_events_with_the_same_final_transcript_do_not_generate_twice(self, generate_response):
+        user = get_user_model().objects.create_user("duplicate-revision-learner", password="test")
+        user.groups.add(Group.objects.create(name="Class: Duplicate revision"))
+        prompt = RolePrompt.objects.create(title="Duplicate revision scenario", content=scenario_text(), is_active=True)
+        chat_session = views._create_chat_session(user, prompt, ChatSession.InteractionMode.VOICE)
+        VoiceConversation.objects.create(
+            chat_session=chat_session,
+            provider_conversation_id="conv_duplicate_revision",
+            introduction_completed_at=timezone.now(),
+        )
+        speech_session = SimpleNamespace(
+            conversation_id="conv_duplicate_revision",
+            _current_event_id=489,
+            send_response=AsyncMock(),
+        )
+        transcript = [SimpleNamespace(role="user", content="Same finalized words")]
+        adapter = SpeechEngineAdapter()
+        async_to_sync(adapter.on_transcript)(transcript, speech_session)
+        speech_session._current_event_id = 490
+        async_to_sync(adapter.on_transcript)(transcript, speech_session)
+
+        generate_response.assert_called_once()
+        self.assertEqual(chat_session.messages.filter(sender=ChatMessage.Sender.STUDENT).count(), 1)
+        self.assertEqual(speech_session.send_response.await_count, 2)
 
     @patch("vip.speech_engine.adapter._run_sync", new_callable=AsyncMock)
     def test_provider_error_logs_the_mapped_voice_and_chat_session_context(self, run_sync):
@@ -767,6 +1023,49 @@ class SpeechEngineAdapterTests(TestCase):
             "[sighs] A persisted reply. [pleading] Please stay with me.",
         )
 
+    @patch.dict("os.environ", {"OPENAI_API_KEY": "test"}, clear=False)
+    def test_voice_turn_uses_the_updated_core_workflow_and_keeps_audio_tags(self):
+        user = get_user_model().objects.create_user("core-adapter-learner", password="test")
+        user.groups.add(Group.objects.create(name="Class: Core adapter"))
+        prompt = RolePrompt.objects.create(
+            title="Core adapter scenario",
+            content=scenario_text(),
+            is_active=True,
+        )
+        chat_session = views._create_chat_session(
+            user,
+            prompt,
+            ChatSession.InteractionMode.VOICE,
+        )
+        claim = speech_engine_adapter._claim_voice_turn(
+            chat_session.id,
+            "What are you most worried about?",
+            "eleven_core_1",
+        )
+        model_result = {
+            "answer_status": "learner_question",
+            "dialogue": "[voice breaks] I am afraid we will miss a chance to bring her back.",
+            "question_id": "",
+            "addressed_question_ids": [],
+            "ready_to_close": False,
+            "readiness_evidence": "",
+        }
+        with patch.object(
+            ConversationEngine,
+            "_assess_core_reply",
+            return_value=model_result,
+        ) as assess:
+            reply = speech_engine_adapter._generate_and_persist_voice_response(
+                claim,
+                threading.Event(),
+            )
+
+        assess.assert_called_once()
+        self.assertEqual(reply, model_result["dialogue"])
+        chat_session.refresh_from_db()
+        self.assertEqual(chat_session.messages.get(sender="assistant").content, model_result["dialogue"])
+        self.assertEqual(chat_session.core_question_state["turn"], 1)
+
     def test_provider_disconnect_closes_the_durable_voice_session(self):
         user = get_user_model().objects.create_user("adapter-disconnect-learner", password="test")
         user.groups.add(Group.objects.create(name="Class: Adapter disconnect"))
@@ -797,7 +1096,6 @@ class SpeechEngineAdapterTests(TestCase):
                 claim_id=claimed.active_claim_id,
             )
         )
-
 
 class ProfessorTestChatModeTests(TestCase):
     def setUp(self):

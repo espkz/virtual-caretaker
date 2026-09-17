@@ -16,7 +16,7 @@ class Command(BaseCommand):
     help = "Run the isolated, authenticated ElevenLabs Speech Engine upstream server."
 
     def add_arguments(self, parser):
-        parser.add_argument("--port", type=int, default=None, help="WebSocket port (default: SPEECH_ENGINE_PORT or 3001).")
+        parser.add_argument("--port", type=int, default=None, help="WebSocket port (default: SPEECH_ENGINE_PORT or 8081).")
         parser.add_argument("--debug", action="store_true", help="Enable SDK protocol logs; do not use in production.")
 
     def handle(self, *args, **options):

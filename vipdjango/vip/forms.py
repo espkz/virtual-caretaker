@@ -68,7 +68,7 @@ class RolePromptForm(forms.Form):
     )
     middle = forms.CharField(
         widget=forms.Textarea(attrs={"rows": 8}),
-        help_text="For short core-question practice, use a top-level '- Theme' bullet for each theme and indented numbered questions beneath it. The opening counts as the first concern of the first theme. The app selects two concerns per theme and allows one clarification per theme.",
+        help_text="For guided scenario practice, use a top-level '- Theme' bullet for each theme and indented numbered questions beneath it. Use the full question set and conditional reactions. The app tracks concerns, answers learner questions, and allows up to 25 exchanges with time reserved for each theme.",
     )
     middle_to_ending_cues = forms.CharField(
         widget=forms.Textarea(attrs={"rows": 3}),

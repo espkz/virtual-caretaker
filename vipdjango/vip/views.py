@@ -139,7 +139,7 @@ def _request_turn_id(value):
     return uuid.uuid4().hex
 
 
-def _accept_learner_turn(session, user_text, turn_id):
+def _accept_learner_turn(session, user_text, turn_id, *, allow_voice_supersede=False):
     """Atomically claim one learner turn for a session.
 
     The session row is the lock. A retry with the same ID is idempotent; a
@@ -188,11 +188,52 @@ def _accept_learner_turn(session, user_text, turn_id):
             locked_session.save(update_fields=["active_turn_id", "active_claim_id", "active_claimed_at"])
             return locked_session, "accepted", None
 
+        latest = locked_session.messages.order_by("-id").first()
         if locked_session.active_turn_id:
+            if (
+                allow_voice_supersede
+                and latest
+                and latest.sender == ChatMessage.Sender.STUDENT
+                and latest.turn_id != turn_id
+            ):
+                # Speech Engine cancels an in-flight callback when it delivers
+                # a replacement finalized event.  That cancellation and its
+                # database release run on different async/sync boundaries, so
+                # the replacement can legitimately arrive first.  Give the
+                # newer provider event the claim now.  A late worker for the
+                # old claim cannot persist because its claim ID no longer
+                # matches.
+                logger.info(
+                    "Superseding interrupted voice turn session=%s old_turn=%s new_turn=%s",
+                    locked_session.pk,
+                    locked_session.active_turn_id,
+                    turn_id,
+                )
+                latest.content = user_text
+                latest.turn_id = turn_id
+                latest.save(update_fields=["content", "turn_id"])
+                locked_session.active_turn_id = turn_id
+                locked_session.active_claim_id = uuid.uuid4().hex
+                locked_session.active_claimed_at = timezone.now()
+                locked_session.save(update_fields=["active_turn_id", "active_claim_id", "active_claimed_at"])
+                return locked_session, "accepted", None
             return locked_session, "pending", None
 
-        latest = locked_session.messages.order_by("-id").first()
         if latest and latest.sender == ChatMessage.Sender.STUDENT:
+            if allow_voice_supersede and latest.turn_id != turn_id:
+                # ElevenLabs can finalize a replacement transcript while the
+                # previous callback is being interrupted. The old learner row
+                # has no assistant pair, so replace it rather than leaving
+                # the new provider event pending forever or creating two
+                # learner turns for one utterance.
+                latest.content = user_text
+                latest.turn_id = turn_id
+                latest.save(update_fields=["content", "turn_id"])
+                locked_session.active_turn_id = turn_id
+                locked_session.active_claim_id = uuid.uuid4().hex
+                locked_session.active_claimed_at = timezone.now()
+                locked_session.save(update_fields=["active_turn_id", "active_claim_id", "active_claimed_at"])
+                return locked_session, "accepted", None
             return locked_session, "pending", None
 
         ChatMessage.objects.create(
@@ -1127,6 +1168,11 @@ def _chat_dashboard_context(
 ):
     latest = current_session.messages.order_by("-id").first() if current_session else None
     pending = latest if latest and latest.sender == ChatMessage.Sender.STUDENT else None
+    voice_call = (
+        current_session.voice_conversations.order_by("-created_at").first()
+        if current_session and current_session.interaction_mode == ChatSession.InteractionMode.VOICE
+        else None
+    )
     presentation = _scenario_presentation(session=current_session, prompt=selected_prompt)
     scenario = parse_scenario_prompt(
         (current_session.scenario_content if current_session else "")
@@ -1138,6 +1184,7 @@ def _chat_dashboard_context(
         "selected_prompt": selected_prompt,
         "sessions": sessions,
         "current_session": current_session,
+        "voice_call_failed": bool(voice_call and voice_call.status == VoiceConversation.Status.ERROR),
         "rendered_messages": _rendered_chat_messages(current_session, user_label),
         "error_message": error_message,
         "force_new": force_new,

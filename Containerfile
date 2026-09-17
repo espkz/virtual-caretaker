@@ -19,6 +19,6 @@ RUN chmod +x /app/entrypoint.sh
 
 WORKDIR /app/vipdjango
 
-EXPOSE 8080
+EXPOSE 8080 8081
 
 ENTRYPOINT ["/app/entrypoint.sh"]
