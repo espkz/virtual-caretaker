@@ -29,8 +29,9 @@ class BrowserSmokeTests(StaticLiveServerTestCase):
                 page.context.add_cookies([{"name": "sessionid", "value": cookie, "url": self.live_server_url}])
                 page.goto(f"{self.live_server_url}/professor/test-chat/?prompt={prompt.id}")
                 self.assertIn("AI nurse demo", page.locator('.prompt-select option:checked').inner_text())
+                self.assertTrue(page.get_by_text("How would you like to practice?").is_visible())
                 with page.expect_navigation():
-                    page.get_by_role("button", name="New Chat", exact=True).click()
+                    page.get_by_role("button", name="Start Text Conversation", exact=True).click()
                 self.assertIn("you play Rachel", page.locator('.chat-window').inner_text())
                 page.locator('#student-message-input').fill("Won't she feel hungry and thirsty?")
                 nurse_answer = "We will continue comfort care. Do these explanations make sense, and do you feel ready?"
@@ -66,7 +67,10 @@ class BrowserSmokeTests(StaticLiveServerTestCase):
                 with page.expect_navigation():
                     page.locator('button[type="submit"]').click()
                 with page.expect_navigation():
-                    page.get_by_role("button", name="Start New Chat", exact=True).click()
+                    page.get_by_role("button", name="New Chat", exact=True).click()
+                self.assertTrue(page.get_by_text("How would you like to practice?").is_visible())
+                with page.expect_navigation():
+                    page.get_by_role("button", name="Start Text Conversation", exact=True).click()
                 page.locator('#student-message-input').fill("Hello, I'm your nurse today.")
                 with patch("vip.views._generate_assistant_response", side_effect=RuntimeError("synthetic outage")):
                     with self.assertLogs("vip.views", level="ERROR"):

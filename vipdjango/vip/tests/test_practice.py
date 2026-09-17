@@ -14,7 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from vip import core_questions, views
-from vip.conversation_engine import ConversationEngine
+from vip.conversation_engine import ConversationEngine, clean_dialogue_for_display, split_dialogue_and_voice
 from vip.conversation_graph import MAX_TURNS
 from vip.conversation_scenario import parse_scenario_prompt
 from vip.models import ChatMessage, ChatSession, RolePrompt
@@ -22,7 +22,16 @@ from vip.speech import SpeechStream
 
 
 def scenario_text(number=1):
-    return (Path(settings.BASE_DIR).parent / "prompts" / f"role_rachel_ellison_{number}.md").read_text(encoding="utf-8")
+    content = (Path(settings.BASE_DIR).parent / "prompts" / f"role_rachel_ellison_{number}.md").read_text(encoding="utf-8")
+    return (
+        "## Simulation Mode\nroleplay\n\n" + content
+    ).replace(
+        "## Introduction Voice\n\n",
+        "## Introduction Voice\nvoice_intro_test\n\n",
+    ).replace(
+        "## Roleplay Voice\n\n",
+        "## Roleplay Voice\nvoice_roleplay_test\n\n",
+    )
 
 
 def message(sender, content):
@@ -131,6 +140,110 @@ class CorePracticeTests(SimpleTestCase):
         self.assertNotIn("dialogue", request["text"]["format"]["schema"]["properties"])
 
 
+class InlineAudioTagContractTests(SimpleTestCase):
+    def test_supported_inline_audio_tags_are_cleaned_only_for_display(self):
+        raw = "[voice breaks] I want you to be okay. [pause] Can you do that for me?"
+        self.assertEqual(
+            clean_dialogue_for_display(raw),
+            "I want you to be okay. Can you do that for me?",
+        )
+        self.assertEqual(split_dialogue_and_voice(raw), (raw, ""))
+        self.assertEqual(
+            clean_dialogue_for_display("Keep [case number] in the record."),
+            "Keep [case number] in the record.",
+        )
+
+    def test_llm_output_schema_accepts_inline_dialogue_without_a_voice_field(self):
+        engine = ConversationEngine("", "test")
+        client = MagicMock()
+        raw = "[sighs] I want you to be okay. [pleading] Can you do that for me?"
+        client.responses.create.return_value.output_text = json.dumps(
+            {
+                "dialogue": raw,
+                "stage": "beginning",
+                "stage_transition_ready": False,
+                "complete": False,
+                "stop_requested": False,
+                "active_objective": "",
+                "covered_objectives": [],
+                "unresolved_objectives": [],
+                "ending_ready": False,
+                "active_topic": "",
+                "covered_topics": [],
+                "unresolved_topics": [],
+            }
+        )
+        scenario = parse_scenario_prompt(scenario_text()).to_state()
+        state = {
+            "scenario": scenario,
+            "history": [],
+            "current_stage": "beginning",
+            "current_turn": 1,
+            "target_turns": 10,
+            "turns_remaining": 19,
+            "phase": "normal",
+            "active_objective": "",
+            "covered_objectives": [],
+            "unresolved_objectives": [],
+            "ending_ready": False,
+            "active_topic": "",
+            "covered_topics": [],
+            "unresolved_topics": [],
+            "topic_turn_counts": {},
+        }
+        with patch.object(engine, "_openai_client", return_value=client):
+            self.assertEqual(engine._request_llm_turn(state)["dialogue"], raw)
+
+        request = client.responses.create.call_args.kwargs
+        schema = request["text"]["format"]["schema"]
+        self.assertNotIn("voice", schema["properties"])
+        self.assertNotIn("voice", schema["required"])
+        self.assertIn("MUST contain at least one inline ElevenLabs v3 audio tag", request["input"][0]["content"])
+        self.assertIn("Begin every response with a short lowercase square-bracket delivery cue", request["input"][0]["content"])
+
+    def test_model_turn_keeps_multiple_inline_tags_and_returns_no_separate_voice_metadata(self):
+        engine = ConversationEngine("", "test")
+        raw = "[sighs] I want you to be okay. [pleading] Can you do that for me?"
+        scenario = parse_scenario_prompt(scenario_text()).to_state()
+        state = {
+            "scenario": scenario,
+            "history": [],
+            "current_stage": "beginning",
+            "current_turn": 1,
+            "target_turns": 10,
+            "turns_remaining": 19,
+            "max_turns": 20,
+            "phase": "normal",
+            "active_objective": "",
+            "covered_objectives": [],
+            "unresolved_objectives": [],
+            "ending_ready": False,
+            "active_topic": "",
+            "covered_topics": [],
+            "unresolved_topics": [],
+            "topic_turn_counts": {},
+        }
+        result = {
+            "dialogue": raw,
+            "stage": "beginning",
+            "stage_transition_ready": False,
+            "complete": False,
+            "stop_requested": False,
+            "active_objective": "",
+            "covered_objectives": [],
+            "unresolved_objectives": [],
+            "ending_ready": False,
+            "active_topic": "",
+            "covered_topics": [],
+            "unresolved_topics": [],
+        }
+        with patch.object(engine, "_request_llm_turn", return_value=result):
+            dialogue, voice_metadata, *_rest = engine._llm_turn(state)
+
+        self.assertEqual(dialogue, raw)
+        self.assertEqual(voice_metadata, "")
+
+
 class ChatWorkflowTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user("learner", password="test")
@@ -176,7 +289,7 @@ class ChatWorkflowTests(TestCase):
         with self.assertLogs("vip.views", level="ERROR"):
             response = self.post()
         self.assertEqual(response.status_code, 503)
-        self.assertEqual(self.session.messages.filter(sender="assistant").count(), 1)
+        self.assertEqual(self.session.messages.filter(sender="assistant").count(), 0)
 
     def test_scenario_edit_does_not_change_an_existing_session(self):
         original = self.prompt.content
@@ -185,6 +298,62 @@ class ChatWorkflowTests(TestCase):
         with patch("vip.views._generate_assistant_response", return_value=("Response", False, {})) as generate:
             self.post()
         self.assertEqual(generate.call_args.args[0], original)
+
+    def test_simulation_introduction_is_presentation_only(self):
+        self.assertFalse(self.session.messages.exists())
+        response = self.client.get(self.url, {"session": self.session.id, "prompt": self.prompt.id})
+        self.assertContains(response, "SIMULATION")
+        self.assertEqual(response.context["simulation_introduction"], parse_scenario_prompt(scenario_text()).introduction)
+        sent_messages = []
+
+        def generate_response(role_text, messages, session):
+            sent_messages.extend(list(messages))
+            return "Role reply", False, {}
+
+        with patch("vip.views._generate_assistant_response", side_effect=generate_response):
+            self.post(text="Hello, I am your nurse.")
+        self.assertEqual([(item.sender, item.content) for item in sent_messages], [("student", "Hello, I am your nurse.")])
+
+    def test_legacy_persisted_introduction_is_not_duplicated_or_sent_to_engine(self):
+        introduction = parse_scenario_prompt(scenario_text()).introduction
+        legacy = ChatMessage.objects.create(session=self.session, sender="assistant", content=introduction)
+        self.assertNotIn(legacy.id, views._conversation_messages(self.session).values_list("id", flat=True))
+        response = self.client.get(self.url, {"session": self.session.id, "prompt": self.prompt.id})
+        self.assertEqual(response.context["simulation_introduction"], introduction)
+        self.assertEqual(response.context["rendered_messages"], [])
+
+    def test_download_has_mode_and_logical_simulation_transcript(self):
+        ChatMessage.objects.create(session=self.session, sender="student", content="Hello")
+        ChatMessage.objects.create(session=self.session, sender="assistant", content="Hi there")
+        response = self.client.get(reverse("vip:student_download_session", args=[self.session.id]))
+        content = response.content.decode()
+        self.assertIn("Mode: Text", content)
+        self.assertIn("SIMULATION:", content)
+        self.assertIn("YOU: Hello", content)
+        self.assertIn("RACHEL ELLISON: Hi there", content)
+
+    def test_inline_audio_tags_are_clean_on_screen_and_retained_in_download(self):
+        raw = "[voice breaks] I want you to be okay. [pause] Can you do that for me?"
+        ChatMessage.objects.create(session=self.session, sender="assistant", content=raw)
+
+        page = self.client.get(self.url, {"session": self.session.id, "prompt": self.prompt.id})
+        self.assertContains(page, "I want you to be okay. Can you do that for me?")
+        self.assertNotContains(page, raw)
+
+        download = self.client.get(reverse("vip:student_download_session", args=[self.session.id]))
+        self.assertIn(raw, download.content.decode())
+
+    def test_student_deletes_saved_session_from_history(self):
+        response = self.client.post(
+            self.url,
+            {
+                "action": "delete_session",
+                "target_session_id": self.session.id,
+                "prompt_id": self.prompt.id,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(ChatSession.objects.filter(pk=self.session.id).exists())
 
     def test_expired_claim_can_retry_and_old_worker_cannot_commit(self):
         old, status, _ = views._accept_learner_turn(self.session, "Hello", "turn1")
@@ -204,12 +373,18 @@ class ChatWorkflowTests(TestCase):
         self.assertFalse(views._persist_assistant_response(claimed, "late", False, {}, "turn1", claim_id=claimed.active_claim_id))
 
     def test_another_student_cannot_read_transcript_or_voice(self):
+        spoken = ChatMessage.objects.create(
+            session=self.session,
+            sender="assistant",
+            content="Private reply",
+            voice_metadata="female voice",
+        )
         other = get_user_model().objects.create_user("other")
         other.groups.add(self.user.groups.first())
         self.client.force_login(other)
         self.assertEqual(self.client.get(self.url, {"session": self.session.id}).status_code, 404)
         self.assertEqual(self.client.get(reverse("vip:student_download_session", args=[self.session.id])).status_code, 404)
-        self.assertEqual(self.client.get(reverse("vip:student_message_tts", args=[self.session.messages.first().id])).status_code, 404)
+        self.assertEqual(self.client.get(reverse("vip:student_message_tts", args=[spoken.id])).status_code, 404)
 
     def test_switching_scenario_does_not_show_previous_transcript(self):
         other = RolePrompt.objects.create(title="Other", content=scenario_text(2), is_active=True)
@@ -237,10 +412,8 @@ class ChatWorkflowTests(TestCase):
         self.assertEqual(RolePrompt.objects.count(), 3)
 
     @patch.dict("os.environ", {"OPENAI_API_KEY": "test"})
-    def test_audio_is_streamed_and_introduction_is_never_spoken(self):
-        intro = self.session.messages.first()
-        url = reverse("vip:student_message_tts", args=[intro.id])
-        self.assertEqual(self.client.get(url, {"emotion": "0"}).status_code, 400)
+    def test_character_audio_is_streamed_only_for_roleplay_messages(self):
+        self.assertFalse(self.session.messages.exists())
         spoken = ChatMessage.objects.create(session=self.session, sender="assistant", content="Hello", voice_metadata="female voice, worried")
         with patch("vip.speech.SpeechStream", return_value=iter([b"first", b"second"])) as stream:
             response = self.client.get(reverse("vip:student_message_tts", args=[spoken.id]))

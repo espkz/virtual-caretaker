@@ -2,6 +2,7 @@ import os
 import re
 import io
 import csv
+import json
 import logging
 import uuid
 from datetime import timedelta
@@ -9,10 +10,12 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from django.conf import settings
-from django.http import HttpResponse, HttpResponseBadRequest, StreamingHttpResponse
+from django.core.exceptions import ValidationError
+from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import Group
 from django.contrib.auth import update_session_auth_hash
@@ -30,16 +33,38 @@ from .forms import (
     StudentAccountCreateForm,
     StudentBulkUploadForm,
 )
-from .models import ChatMessage, ChatSession, RolePrompt
+from .models import ChatMessage, ChatSession, RolePrompt, VoiceConversation
 from .conversation_graph import MAX_TURNS
 from .conversation_engine import (
-    DEFAULT_INTRODUCTION,
     ConversationEngine,
+    clean_dialogue_for_display,
     split_dialogue_and_voice,
 )
 from .conversation_scenario import parse_scenario_prompt
+from .speech_engine.service import (
+    ElevenLabsSpeechStream,
+    SpeechEngineConfigurationError,
+    api_key as elevenlabs_api_key,
+    is_speech_engine_configured,
+    issue_webrtc_token,
+    list_elevenlabs_voice_options,
+    speech_engine_max_duration_seconds,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _prompt_voice_options():
+    """Return form choices and browser-safe provider preview URLs together."""
+    options = list_elevenlabs_voice_options()
+    return (
+        [(option.voice_id, option.name) for option in options],
+        {
+            option.voice_id: option.preview_url
+            for option in options
+            if option.preview_url
+        },
+    )
 
 def _prompt_file_path(filename):
     candidates = [
@@ -405,6 +430,22 @@ def _is_student(user):
     )
 
 
+def _can_use_voice_practice(user):
+    return _is_student(user) or _is_professor(user)
+
+
+def _deactivate_incomplete_prompts(prompts):
+    """Keep legacy/bulk-created incomplete prompts from remaining active."""
+    incomplete_ids = []
+    for prompt in prompts:
+        if prompt.is_active and not prompt.is_complete:
+            prompt.is_active = False
+            incomplete_ids.append(prompt.pk)
+    if incomplete_ids:
+        RolePrompt.objects.filter(pk__in=incomplete_ids, is_active=True).update(is_active=False)
+    return prompts
+
+
 def _student_queryset():
     User = get_user_model()
     return (
@@ -476,7 +517,9 @@ def professor_dashboard(request):
     if current_tab not in {"prompts", "logs", "test_chat"}:
         current_tab = "prompts"
 
-    prompts = RolePrompt.objects.order_by("-updated_at")
+    prompts = _deactivate_incomplete_prompts(
+        list(RolePrompt.objects.order_by("-updated_at"))
+    )
     prompt_upload_form = PromptTextUploadForm()
     students = (
         _student_queryset().prefetch_related("groups")
@@ -561,7 +604,8 @@ def professor_upload_prompt_file(request):
         title=title or "Uploaded Prompt",
         is_active=form.cleaned_data["is_active"],
     )
-    structured_form = RolePromptForm(parsed_initial)
+    voice_choices, _voice_preview_urls = _prompt_voice_options()
+    structured_form = RolePromptForm(parsed_initial, voice_choices=voice_choices)
     if structured_form.is_valid():
         structured_content = structured_form.render_markdown_content()
     else:
@@ -573,6 +617,7 @@ def professor_upload_prompt_file(request):
         created_by=request.user,
         is_active=form.cleaned_data["is_active"],
     )
+    messages.success(request, "Your prompt has been saved")
     return redirect(f"{reverse('vip:professor_dashboard')}?tab=prompts")
 
 
@@ -763,8 +808,9 @@ def create_prompt(request):
     if not _is_professor(request.user):
         return redirect("vip:home")
 
+    voice_choices, voice_preview_urls = _prompt_voice_options()
     if request.method == "POST":
-        form = RolePromptForm(request.POST)
+        form = RolePromptForm(request.POST, voice_choices=voice_choices)
         if form.is_valid():
             RolePrompt.objects.create(
                 title=form.cleaned_data["title"],
@@ -772,14 +818,19 @@ def create_prompt(request):
                 created_by=request.user,
                 is_active=form.cleaned_data["is_active"],
             )
-            return redirect("vip:professor_dashboard")
+            messages.success(request, "Your prompt has been saved")
+            return redirect(f"{reverse('vip:professor_dashboard')}?tab=prompts")
     else:
-        form = RolePromptForm()
+        form = RolePromptForm(voice_choices=voice_choices)
 
     return render(
         request,
         "vip/prompt_form.html",
-        {"form": form, "page_title": "Add Prompt"},
+        {
+            "form": form,
+            "page_title": "Add Prompt",
+            "voice_preview_urls": voice_preview_urls,
+        },
     )
 
 @login_required
@@ -788,22 +839,37 @@ def edit_prompt(request, prompt_id):
         return redirect("vip:home")
 
     prompt = get_object_or_404(RolePrompt, pk=prompt_id)
+    if prompt.is_active and not prompt.is_complete:
+        prompt.is_active = False
+        prompt.save(update_fields=["is_active", "updated_at"])
 
+    voice_choices, voice_preview_urls = _prompt_voice_options()
     if request.method == "POST":
-        form = RolePromptForm(request.POST)
+        form = RolePromptForm(request.POST, voice_choices=voice_choices)
         if form.is_valid():
             prompt.title = form.cleaned_data["title"]
             prompt.is_active = form.cleaned_data["is_active"]
             prompt.content = form.render_markdown_content()
             prompt.save(update_fields=["title", "is_active", "content", "updated_at"])
-            return redirect("vip:professor_dashboard")
+            messages.success(request, "Your prompt has been saved")
+            return redirect(f"{reverse('vip:professor_dashboard')}?tab=prompts")
+        if prompt.is_active:
+            prompt.is_active = False
+            prompt.save(update_fields=["is_active", "updated_at"])
     else:
-        form = RolePromptForm(initial=RolePromptForm.initial_from_prompt(prompt))
+        form = RolePromptForm(
+            initial=RolePromptForm.initial_from_prompt(prompt),
+            voice_choices=voice_choices,
+        )
 
     return render(
         request,
         "vip/prompt_form.html",
-        {"form": form, "page_title": "Edit Prompt"},
+        {
+            "form": form,
+            "page_title": "Edit Prompt",
+            "voice_preview_urls": voice_preview_urls,
+        },
     )
 
 
@@ -814,6 +880,14 @@ def set_active_prompt(request, prompt_id):
         return redirect("vip:home")
 
     selected_prompt = get_object_or_404(RolePrompt, pk=prompt_id)
+    if not selected_prompt.is_complete:
+        selected_prompt.is_active = False
+        selected_prompt.save(update_fields=["is_active", "updated_at"])
+        messages.error(
+            request,
+            "Complete every required prompt field before activating this prompt.",
+        )
+        return redirect(f"{reverse('vip:professor_dashboard')}?tab=prompts")
     selected_prompt.is_active = True
     selected_prompt.save(update_fields=["is_active", "updated_at"])
     return redirect("vip:professor_dashboard")
@@ -863,6 +937,7 @@ def professor_session_detail(request, session_id):
             "session": session,
             "messages": messages,
             "rendered_messages": _rendered_chat_messages(session, "Student"),
+            "simulation_introduction": _simulation_introduction(session=session),
         },
     )
 
@@ -937,21 +1012,102 @@ def _chat_url(view_name, selected_prompt=None, **params):
     return f"{url}?{urlencode(query)}" if query else url
 
 
+def _scenario_text_for_session(session):
+    if not session:
+        return ""
+    return session.scenario_content or getattr(session.role_prompt, "content", "")
+
+
+def _simulation_introduction(session=None, prompt=None):
+    role_text = _scenario_text_for_session(session) if session else getattr(prompt, "content", "")
+    if not role_text:
+        return "Welcome to the virtual patient simulation. When you're ready, introduce yourself and begin the conversation."
+    scenario = parse_scenario_prompt(role_text)
+    if scenario.introduction.strip():
+        return scenario.introduction.strip()
+    character = _role_summary(scenario.character, "the simulated character")
+    learner = _role_summary(scenario.learner, "the learner in this simulation")
+    return (
+        f"Welcome to the virtual patient simulation. You are speaking with {character}. "
+        f"Your role is {learner}. When you're ready, introduce yourself and begin the conversation."
+    )
+
+
+def _role_summary(value, fallback):
+    value = re.sub(r"^\s*(?:you are|the human participant (?:is|plays))\s+", "", value or "", flags=re.I)
+    first_sentence = re.split(r"(?<=[.!?])\s+|\n", value.strip(), maxsplit=1)[0].strip().rstrip(".!?")
+    # Character prompts commonly put the name before a descriptive appositive.
+    if first_sentence.lower().startswith(("rachel ", "margaret ")) and "," in first_sentence:
+        first_sentence = first_sentence.split(",", 1)[0]
+    if len(first_sentence) > 180:
+        first_sentence = first_sentence[:177].rstrip() + "..."
+    return first_sentence or fallback
+
+
+def _scenario_presentation(session=None, prompt=None):
+    role_text = _scenario_text_for_session(session) if session else getattr(prompt, "content", "")
+    scenario = parse_scenario_prompt(role_text) if role_text else None
+    fallback = getattr(prompt, "title", "") or getattr(getattr(session, "role_prompt", None), "title", "") or "Simulated character"
+    if not scenario:
+        return {
+            "character_label": fallback,
+            "character_summary": fallback,
+            "learner_summary": "the learner in this simulation",
+            "briefing_context": "",
+        }
+    background = re.split(r"(?<=[.!?])\s+|\n", scenario.background_context.strip(), maxsplit=1)[0].strip()
+    if len(background) > 280:
+        background = background[:277].rstrip() + "..."
+    character = _role_summary(scenario.character, fallback)
+    return {
+        "character_label": character,
+        "character_summary": character,
+        "learner_summary": _role_summary(scenario.learner, "the learner in this simulation"),
+        "briefing_context": background,
+    }
+
+
+def _legacy_introduction_message_id(session):
+    """Identify introductions stored as assistant messages by older sessions."""
+    if not session:
+        return None
+    candidate = (
+        session.messages.filter(sender=ChatMessage.Sender.ASSISTANT, turn_id="")
+        .order_by("created_at", "id")
+        .first()
+    )
+    if candidate and candidate.content.strip() == _simulation_introduction(session=session):
+        return candidate.id
+    return None
+
+
+def _conversation_messages(session):
+    """Return only roleplay turns passed to ConversationEngine."""
+    messages = session.messages.order_by("created_at", "id")
+    legacy_intro_id = _legacy_introduction_message_id(session)
+    return messages.exclude(pk=legacy_intro_id) if legacy_intro_id else messages
+
+
 def _rendered_chat_messages(session, user_label):
     if not session:
         return []
 
+    presentation = _scenario_presentation(session=session)
+    legacy_intro_id = _legacy_introduction_message_id(session)
     rendered = []
-    for message in session.messages.order_by("created_at"):
+    for message in session.messages.order_by("created_at", "id"):
+        if message.id == legacy_intro_id:
+            continue
         display_content = message.content
         embedded_emotion = ""
         if message.sender == ChatMessage.Sender.ASSISTANT:
-            display_content, embedded_emotion = split_dialogue_and_voice(message.content)
+            _legacy_dialogue, embedded_emotion = split_dialogue_and_voice(message.content)
+            display_content = clean_dialogue_for_display(message.content)
         rendered.append(
             {
                 "id": message.id,
                 "sender": message.sender,
-                "sender_display": "AI" if message.sender == ChatMessage.Sender.ASSISTANT else user_label,
+                "sender_display": presentation["character_label"] if message.sender == ChatMessage.Sender.ASSISTANT else user_label,
                 "created_at": message.created_at,
                 "display_content": display_content,
                 "voice_enabled": bool(message.voice_metadata or embedded_emotion),
@@ -971,6 +1127,12 @@ def _chat_dashboard_context(
 ):
     latest = current_session.messages.order_by("-id").first() if current_session else None
     pending = latest if latest and latest.sender == ChatMessage.Sender.STUDENT else None
+    presentation = _scenario_presentation(session=current_session, prompt=selected_prompt)
+    scenario = parse_scenario_prompt(
+        (current_session.scenario_content if current_session else "")
+        or (selected_prompt.content if selected_prompt else "")
+    )
+    voice_configured = bool(scenario.introduction_voice_id and scenario.roleplay_voice_id)
     return {
         "active_prompts": active_prompts,
         "selected_prompt": selected_prompt,
@@ -980,12 +1142,35 @@ def _chat_dashboard_context(
         "error_message": error_message,
         "force_new": force_new,
         "pending_message": pending,
+        "simulation_introduction": _simulation_introduction(session=current_session, prompt=selected_prompt),
+        "character_label": presentation["character_label"],
+        "scenario_character": presentation["character_summary"],
+        "scenario_learner": presentation["learner_summary"],
+        "scenario_briefing_context": presentation["briefing_context"],
+        "show_mode_selection": bool(selected_prompt and current_session is None),
+        "is_text_session": bool(current_session and current_session.interaction_mode == ChatSession.InteractionMode.TEXT),
+        "is_voice_session": bool(current_session and current_session.interaction_mode == ChatSession.InteractionMode.VOICE),
+        # This is deliberately only a capability flag. The page never receives
+        # the API key, Speech Engine ID, or a reusable provider credential.
+        "speech_engine_enabled": is_speech_engine_configured(),
+        "voice_enabled": is_speech_engine_configured() and voice_configured,
+        "voice_configuration_ready": voice_configured,
     }
 
 
-def _selected_chat_state(request):
-    active_prompts = RolePrompt.objects.all() if _is_professor(request.user) else RolePrompt.objects.filter(is_active=True)
-    active_prompts = active_prompts.order_by("title")
+def _selected_chat_state(request, *, restore_latest_session=True):
+    prompt_queryset = RolePrompt.objects.all() if _is_professor(request.user) else RolePrompt.objects.filter(is_active=True)
+    prompt_candidates = _deactivate_incomplete_prompts(
+        list(prompt_queryset.order_by("title"))
+    )
+    # Professors may test complete drafts, but an incomplete prompt is never
+    # offered to either role. Existing saved sessions remain independently
+    # viewable through their scenario snapshots.
+    active_prompts = [
+        prompt
+        for prompt in prompt_candidates
+        if prompt.is_complete and (_is_professor(request.user) or prompt.is_active)
+    ]
     sessions = (
         ChatSession.objects.filter(student=request.user)
         .select_related("role_prompt")
@@ -996,9 +1181,12 @@ def _selected_chat_state(request):
     selected_prompt = None
     selected_prompt_id = request.POST.get("prompt_id") or request.GET.get("prompt")
     if selected_prompt_id:
-        selected_prompt = active_prompts.filter(pk=selected_prompt_id).first()
-    if not selected_prompt:
-        selected_prompt = active_prompts.first()
+        selected_prompt = next(
+            (prompt for prompt in active_prompts if str(prompt.pk) == str(selected_prompt_id)),
+            None,
+        )
+    elif active_prompts:
+        selected_prompt = active_prompts[0]
 
     current_session = None
     session_id = request.POST.get("session_id") or request.GET.get("session")
@@ -1007,21 +1195,41 @@ def _selected_chat_state(request):
             ChatSession.objects.filter(student=request.user).select_related("role_prompt"),
             pk=session_id,
         )
-        if selected_prompt_id and current_session.role_prompt_id != getattr(selected_prompt, "id", None):
-            current_session = sessions.filter(role_prompt=selected_prompt).first()
+        if (
+            selected_prompt_id
+            and str(current_session.role_prompt_id) == str(selected_prompt_id)
+            and selected_prompt is None
+        ):
+            # An incomplete/deactivated prompt may still label a historical
+            # transcript; it cannot be used to start another conversation.
+            selected_prompt = current_session.role_prompt
+        elif selected_prompt_id and current_session.role_prompt_id != getattr(selected_prompt, "id", None):
+            current_session = (
+                sessions.filter(role_prompt=selected_prompt).first()
+                if restore_latest_session
+                else None
+            )
         elif current_session.role_prompt and not selected_prompt_id:
             selected_prompt = current_session.role_prompt
-    elif request.GET.get("new") != "1" and selected_prompt:
+    elif restore_latest_session and request.GET.get("new") != "1" and selected_prompt:
         current_session = sessions.filter(role_prompt=selected_prompt).first()
 
     force_new = request.POST.get("force_new") == "1" or request.GET.get("force_new") == "1"
     return active_prompts, sessions, selected_prompt, current_session, force_new
 
 
-def _usable_chat_session(user, selected_prompt, current_session, force_new, turn_id=""):
+def _usable_chat_session(
+    user,
+    selected_prompt,
+    current_session,
+    force_new,
+    turn_id="",
+    interaction_mode=ChatSession.InteractionMode.TEXT,
+):
     needs_session = (
         not current_session
         or current_session.role_prompt_id != selected_prompt.id
+        or current_session.interaction_mode != interaction_mode
         or (current_session.ended_at is not None and not turn_id)
         or force_new
     )
@@ -1032,37 +1240,25 @@ def _usable_chat_session(user, selected_prompt, current_session, force_new, turn
                 ChatSession.objects.filter(
                     student=user,
                     role_prompt=selected_prompt,
+                    interaction_mode=interaction_mode,
                     ended_at__isnull=True,
                 )
                 .order_by("-started_at")
                 .first()
             )
-        return current_session or _create_chat_session(user, selected_prompt), None
+        return current_session or _create_chat_session(user, selected_prompt, interaction_mode), None
 
     return current_session, None
 
 
-def _seed_introduction(session):
-    """Persist the fixed Introduction as text when a new chat starts."""
-    if not session or not session.role_prompt:
-        return
-    if session.messages.filter(sender=ChatMessage.Sender.ASSISTANT).exists():
-        return
-
-    scenario = parse_scenario_prompt(session.scenario_content or session.role_prompt.content)
-    introduction = (scenario.introduction or DEFAULT_INTRODUCTION).strip()
-    if introduction:
-        ChatMessage.objects.create(
-            session=session,
-            sender=ChatMessage.Sender.ASSISTANT,
-            content=introduction,
-        )
-
-
-def _create_chat_session(user, selected_prompt):
-    session = ChatSession.objects.create(student=user, role_prompt=selected_prompt, scenario_content=selected_prompt.content)
-    _seed_introduction(session)
-    return session
+def _create_chat_session(user, selected_prompt, interaction_mode=ChatSession.InteractionMode.TEXT):
+    """Create the durable chat; the narrator introduction is presentation-only."""
+    return ChatSession.objects.create(
+        student=user,
+        role_prompt=selected_prompt,
+        scenario_content=selected_prompt.content,
+        interaction_mode=interaction_mode,
+    )
 
 
 def _chat_dashboard(
@@ -1073,17 +1269,45 @@ def _chat_dashboard(
     user_label,
     no_prompt_message,
     allow_delete_session=False,
+    choose_mode=False,
+    restore_latest_session=True,
 ):
-    active_prompts, sessions, selected_prompt, current_session, force_new = _selected_chat_state(request)
+    active_prompts, sessions, selected_prompt, current_session, force_new = _selected_chat_state(
+        request,
+        restore_latest_session=restore_latest_session,
+    )
     error_message = None
 
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "new_session":
-            if selected_prompt:
-                session = _create_chat_session(request.user, selected_prompt)
+            if selected_prompt and not selected_prompt.is_complete:
+                error_message = "Complete every required prompt field before testing this scenario."
+            elif selected_prompt:
+                if choose_mode:
+                    return redirect(_chat_url(view_name, selected_prompt, new=1))
+                session = _create_chat_session(request.user, selected_prompt, ChatSession.InteractionMode.TEXT)
                 return redirect(_chat_url(view_name, selected_prompt, session=session.id))
-            return redirect(_chat_url(view_name, selected_prompt))
+            elif not error_message:
+                return redirect(_chat_url(view_name, selected_prompt))
+
+        if choose_mode and action == "start_session":
+            mode = request.POST.get("mode", "").strip()
+            if not selected_prompt:
+                error_message = no_prompt_message
+            elif not selected_prompt.is_complete:
+                error_message = "Complete every required prompt field before testing this scenario."
+            elif mode not in ChatSession.InteractionMode.values:
+                error_message = "Choose voice or text practice to continue."
+            elif mode == ChatSession.InteractionMode.VOICE and not is_speech_engine_configured():
+                error_message = "Voice practice is not configured yet. Choose text practice or ask your instructor to enable it."
+            elif mode == ChatSession.InteractionMode.VOICE:
+                scenario = parse_scenario_prompt(selected_prompt.content)
+                if not scenario.introduction_voice_id or not scenario.roleplay_voice_id:
+                    error_message = "Choose both an introduction voice and a roleplay voice in the prompt editor before starting voice practice."
+            if not error_message:
+                session = _create_chat_session(request.user, selected_prompt, mode)
+                return redirect(_chat_url(view_name, selected_prompt, session=session.id))
 
         if allow_delete_session and action == "delete_session":
             target_session_id = request.POST.get("target_session_id") or request.POST.get("session_id")
@@ -1109,6 +1333,8 @@ def _chat_dashboard(
             retry_turn_id = turn_id if requested_turn_id == turn_id else ""
             if not selected_prompt:
                 error_message = no_prompt_message
+            elif not current_session and not selected_prompt.is_complete:
+                error_message = "Complete every required prompt field before testing this scenario."
             elif not user_text:
                 error_message = "Please type a message before sending."
             else:
@@ -1118,6 +1344,7 @@ def _chat_dashboard(
                     current_session,
                     force_new,
                     turn_id=retry_turn_id,
+                    interaction_mode=ChatSession.InteractionMode.TEXT,
                 )
 
                 if not error_message:
@@ -1146,7 +1373,6 @@ def _chat_dashboard(
                     ),
                 )
 
-            _seed_introduction(current_session)
             current_session, turn_status, existing_assistant = _accept_learner_turn(
                 current_session,
                 user_text,
@@ -1180,7 +1406,7 @@ def _chat_dashboard(
             try:
                 assistant_text, conversation_complete, debug_info = _generate_assistant_response(
                     current_session.scenario_content or selected_prompt.content,
-                    current_session.messages.order_by("created_at"),
+                    _conversation_messages(current_session),
                     current_session,
                 )
             except Exception:
@@ -1241,9 +1467,11 @@ def professor_test_chat(request):
         request,
         template_name="vip/professor_test_chat.html",
         view_name="vip:professor_test_chat",
-        user_label="Professor",
+        user_label="YOU",
         no_prompt_message="No scenario is available. Create or upload a scenario first.",
         allow_delete_session=True,
+        choose_mode=True,
+        restore_latest_session=False,
     )
 
 
@@ -1258,9 +1486,390 @@ def student_dashboard(request):
         request,
         template_name="vip/student_dashboard.html",
         view_name="vip:student_dashboard",
-        user_label="Student",
+        user_label="YOU",
         no_prompt_message="No active prompt is available. Ask your professor to activate one.",
+        allow_delete_session=True,
+        choose_mode=True,
     )
+
+
+def _voice_json_payload(request):
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _voice_error(message, status=400):
+    return JsonResponse({"error": message}, status=status)
+
+
+def _finalize_voice_call(voice_call, *, failed=False):
+    """Close the provider run and its durable transcript together.
+
+    A provider close/error and the browser's End Call action can arrive in
+    either order.  The first terminal state wins so an expected disconnect
+    after End Call is never later displayed as a failed call.
+    """
+    if voice_call.ended_at is None:
+        voice_call.status = VoiceConversation.Status.ERROR if failed else VoiceConversation.Status.ENDED
+        voice_call.failure_reason = "Voice connection ended unexpectedly." if failed else ""
+        voice_call.ended_at = voice_call.ended_at or timezone.now()
+        voice_call.save(update_fields=["status", "ended_at", "failure_reason"])
+
+    chat_session = voice_call.chat_session
+    if chat_session.ended_at is None:
+        _release_learner_turn(
+            chat_session,
+            chat_session.active_turn_id,
+            chat_session.active_claim_id,
+        )
+        chat_session.ended_at = timezone.now()
+        chat_session.save(update_fields=["ended_at"])
+
+
+def _voice_session_for_request(user, prompt, payload):
+    """Return the selected open voice session or create one for voice start."""
+    requested_session_id = str(payload.get("session_id") or "").strip()
+    force_new = bool(payload.get("force_new"))
+    current_session = None
+    if requested_session_id and requested_session_id.isdigit() and not force_new:
+        current_session = ChatSession.objects.filter(student=user, pk=requested_session_id).first()
+        if (
+            current_session
+            and (
+                current_session.role_prompt_id != prompt.id
+                or current_session.interaction_mode != ChatSession.InteractionMode.VOICE
+                or current_session.ended_at is not None
+            )
+        ):
+            current_session = None
+    if current_session is None:
+        current_session = _create_chat_session(user, prompt, ChatSession.InteractionMode.VOICE)
+    return current_session
+
+
+@login_required
+@require_POST
+def student_voice_token(request):
+    """Create a short-lived browser token without exposing provider secrets."""
+    if not _can_use_voice_practice(request.user):
+        return _voice_error("Voice practice is available to student and professor accounts.", status=403)
+    payload = _voice_json_payload(request)
+    if payload is None:
+        return _voice_error("Invalid voice request.")
+
+    prompt_id = str(payload.get("prompt_id") or "").strip()
+    prompts = RolePrompt.objects.all() if _is_professor(request.user) else RolePrompt.objects.filter(is_active=True)
+    prompt = prompts.filter(pk=prompt_id).first()
+    if not prompt:
+        return _voice_error("Choose an available scenario before starting voice practice.", status=404)
+    if not prompt.is_complete:
+        if prompt.is_active:
+            prompt.is_active = False
+            prompt.save(update_fields=["is_active", "updated_at"])
+        return _voice_error(
+            "Complete every required prompt field before testing this scenario.",
+            status=409,
+        )
+    if not is_speech_engine_configured():
+        return _voice_error("Voice practice is not configured yet. Ask your instructor to enable it.", status=503)
+
+    chat_session = _voice_session_for_request(request.user, prompt, payload)
+    scenario = parse_scenario_prompt(chat_session.scenario_content or prompt.content)
+    if not scenario.introduction_voice_id or not scenario.roleplay_voice_id:
+        return _voice_error(
+            "This scenario needs both an introduction voice and a roleplay voice before voice practice can start.",
+            status=409,
+        )
+    if chat_session.active_turn_id:
+        return _voice_error("The current chat is still preparing a response. Please wait before starting voice practice.", status=409)
+
+    voice_call = VoiceConversation.objects.create(chat_session=chat_session)
+    try:
+        token = issue_webrtc_token(
+            participant_name=request.user.username,
+            voice_id=scenario.roleplay_voice_id,
+        )
+    except SpeechEngineConfigurationError as error:
+        voice_call.status = VoiceConversation.Status.ERROR
+        voice_call.failure_reason = "Voice service is not configured."
+        voice_call.save(update_fields=["status", "failure_reason"])
+        logger.warning("Speech Engine token configuration failed: %s", error)
+        return _voice_error("Voice practice is not configured yet. Ask your instructor to enable it.", status=503)
+    except Exception:
+        voice_call.status = VoiceConversation.Status.ERROR
+        voice_call.failure_reason = "Could not issue a voice session token."
+        voice_call.save(update_fields=["status", "failure_reason"])
+        logger.exception("Speech Engine token request failed user=%s", request.user.pk)
+        return _voice_error("Voice service is temporarily unavailable. Please try again.", status=503)
+
+    if token.provider_conversation_id:
+        try:
+            with transaction.atomic():
+                voice_call = VoiceConversation.objects.select_for_update().get(pk=voice_call.pk)
+                existing = VoiceConversation.objects.filter(
+                    provider_conversation_id=token.provider_conversation_id
+                ).exclude(pk=voice_call.pk).exists()
+                if existing:
+                    raise ValueError("Provider conversation ID was already mapped.")
+                voice_call.provider_conversation_id = token.provider_conversation_id
+                voice_call.save(update_fields=["provider_conversation_id"])
+        except Exception:
+            voice_call.status = VoiceConversation.Status.ERROR
+            voice_call.failure_reason = "Could not map the voice conversation."
+            voice_call.save(update_fields=["status", "failure_reason"])
+            logger.exception("Speech Engine token mapping failed voice_call=%s", voice_call.pk)
+            return _voice_error("Voice service could not start. Please try again.", status=503)
+
+    presentation = _scenario_presentation(session=chat_session)
+    response = JsonResponse(
+        {
+            "token": token.token,
+            "voice_call_id": str(voice_call.pk),
+            "chat_session_id": chat_session.id,
+            "introduction": _simulation_introduction(session=chat_session),
+            "introduction_audio_url": reverse("vip:student_voice_introduction", args=[chat_session.id]),
+            "download_url": reverse("vip:student_download_session", args=[chat_session.id]),
+            "character_label": presentation["character_label"],
+            "max_duration_seconds": speech_engine_max_duration_seconds(),
+        }
+    )
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@login_required
+@require_POST
+def student_voice_bind(request):
+    """Fallback mapping for SDK/API versions that reveal the ID after connect."""
+    if not _can_use_voice_practice(request.user):
+        return _voice_error("Voice practice is available to student and professor accounts.", status=403)
+    payload = _voice_json_payload(request)
+    if payload is None:
+        return _voice_error("Invalid voice request.")
+    call_id = str(payload.get("voice_call_id") or "").strip()
+    provider_conversation_id = str(payload.get("provider_conversation_id") or "").strip()
+    if not call_id or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", provider_conversation_id):
+        return _voice_error("Invalid voice conversation identifier.")
+
+    try:
+        with transaction.atomic():
+            voice_call = VoiceConversation.objects.select_for_update().filter(
+                pk=call_id,
+                chat_session__student=request.user,
+            ).first()
+            if not voice_call:
+                return _voice_error("Voice session was not found.", status=404)
+            if voice_call.provider_conversation_id and voice_call.provider_conversation_id != provider_conversation_id:
+                return _voice_error("Voice session cannot be rebound to a different conversation.", status=409)
+            existing = VoiceConversation.objects.filter(
+                provider_conversation_id=provider_conversation_id
+            ).exclude(pk=voice_call.pk).exists()
+            if existing:
+                return _voice_error("Voice conversation is already mapped.", status=409)
+            if not voice_call.provider_conversation_id:
+                voice_call.provider_conversation_id = provider_conversation_id
+                voice_call.save(update_fields=["provider_conversation_id"])
+    except (ValueError, ValidationError):
+        return _voice_error("Voice session was not found.", status=404)
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+def student_voice_ready(request):
+    """Open Speech Engine input after the local narrator has fully finished.
+
+    The browser does not create the live Speech Engine session until narrator
+    playback has ended. This marker remains a second, durable boundary: the
+    adapter rejects every transcript until this endpoint succeeds.
+    """
+    if not _can_use_voice_practice(request.user):
+        return _voice_error("Voice practice is available to student and professor accounts.", status=403)
+    payload = _voice_json_payload(request)
+    if payload is None:
+        return _voice_error("Invalid voice request.")
+    call_id = str(payload.get("voice_call_id") or "").strip()
+    try:
+        with transaction.atomic():
+            voice_call = VoiceConversation.objects.select_for_update().filter(
+                pk=call_id,
+                chat_session__student=request.user,
+            ).first()
+            if not voice_call:
+                return _voice_error("Voice session was not found.", status=404)
+            if voice_call.status in {VoiceConversation.Status.ENDED, VoiceConversation.Status.ERROR}:
+                return _voice_error("Voice session has already ended.", status=409)
+            if voice_call.introduction_completed_at is None:
+                voice_call.introduction_completed_at = timezone.now()
+                voice_call.save(update_fields=["introduction_completed_at"])
+    except (ValueError, ValidationError):
+        return _voice_error("Voice session was not found.", status=404)
+    return JsonResponse({"ok": True, "introduction_complete": True})
+
+
+@login_required
+@require_POST
+def student_voice_end(request):
+    """Finalize a voice run and close its saved transcript."""
+    if not _can_use_voice_practice(request.user):
+        return _voice_error("Voice practice is available to student and professor accounts.", status=403)
+    payload = _voice_json_payload(request)
+    if payload is None:
+        return _voice_error("Invalid voice request.")
+    call_id = str(payload.get("voice_call_id") or "").strip()
+    failed = bool(payload.get("failed"))
+    try:
+        with transaction.atomic():
+            voice_call = VoiceConversation.objects.select_for_update().select_related("chat_session").filter(
+                pk=call_id,
+                chat_session__student=request.user,
+            ).first()
+            if not voice_call:
+                return _voice_error("Voice session was not found.", status=404)
+            _finalize_voice_call(voice_call, failed=failed)
+    except (ValueError, ValidationError):
+        return _voice_error("Voice session was not found.", status=404)
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+def student_voice_completion(request):
+    """Report whether the last persisted roleplay response completed the chat.
+
+    The browser asks after receiving an agent message, then waits for
+    ElevenLabs' post-playback completion event before ending the provider
+    connection.  No user input or ConversationEngine turn is created here.
+    """
+    if not _can_use_voice_practice(request.user):
+        return _voice_error("Voice practice is available to student and professor accounts.", status=403)
+    payload = _voice_json_payload(request)
+    if payload is None:
+        return _voice_error("Invalid voice request.")
+    call_id = str(payload.get("voice_call_id") or "").strip()
+    try:
+        voice_call = VoiceConversation.objects.select_related("chat_session").filter(
+            pk=call_id,
+            chat_session__student=request.user,
+        ).first()
+    except (ValueError, ValidationError):
+        voice_call = None
+    if not voice_call:
+        return _voice_error("Voice session was not found.", status=404)
+    return JsonResponse(
+        {
+            "ok": True,
+            "conversation_complete": bool(voice_call.chat_session.completion_status),
+            "session_ended": voice_call.chat_session.ended_at is not None,
+        }
+    )
+
+
+@login_required
+@require_POST
+def student_voice_mute(request):
+    """Persist the microphone gate without changing conversation state."""
+    if not _can_use_voice_practice(request.user):
+        return _voice_error("Voice practice is available to student and professor accounts.", status=403)
+    payload = _voice_json_payload(request)
+    if payload is None:
+        return _voice_error("Invalid voice request.")
+    call_id = str(payload.get("voice_call_id") or "").strip()
+    muted = bool(payload.get("muted"))
+    try:
+        voice_call = VoiceConversation.objects.filter(
+            pk=call_id,
+            chat_session__student=request.user,
+        ).first()
+    except (ValueError, ValidationError):
+        voice_call = None
+    if not voice_call:
+        return _voice_error("Voice session was not found.", status=404)
+    if voice_call.status in {VoiceConversation.Status.ENDED, VoiceConversation.Status.ERROR}:
+        return _voice_error("Voice session has already ended.", status=409)
+    voice_call.is_muted = muted
+    voice_call.save(update_fields=["is_muted"])
+    return JsonResponse({"ok": True, "muted": muted})
+
+
+@login_required
+@require_POST
+def student_voice_connection_diagnostic(request):
+    """Record sanitized browser-side SpeechEngine disconnect context."""
+    if not _can_use_voice_practice(request.user):
+        return _voice_error("Voice practice is available to student and professor accounts.", status=403)
+    payload = _voice_json_payload(request)
+    if payload is None:
+        return _voice_error("Invalid voice request.")
+    call_id = str(payload.get("voice_call_id") or "").strip()
+    try:
+        voice_call = VoiceConversation.objects.select_related("chat_session").filter(
+            pk=call_id,
+            chat_session__student=request.user,
+        ).first()
+    except (ValueError, ValidationError):
+        voice_call = None
+    if not voice_call:
+        return _voice_error("Voice session was not found.", status=404)
+
+    event = str(payload.get("event") or "unknown").strip().lower()
+    if not re.fullmatch(r"[a-z_-]{1,32}", event):
+        event = "unknown"
+    connection_state = str(payload.get("connection_state") or "").strip().lower()
+    connection_state = re.sub(r"[^a-z0-9_-]", "", connection_state)[:64]
+    close_code = payload.get("close_code")
+    if not isinstance(close_code, int) or isinstance(close_code, bool) or not 0 <= close_code <= 65535:
+        close_code = None
+    close_reason = re.sub(r"\s+", " ", str(payload.get("close_reason") or "")).strip()[:240]
+    browser_provider_id = str(payload.get("provider_conversation_id") or "").strip()[:128]
+    logger.warning(
+        "SpeechEngine browser connection event=%s state=%s close_code=%s close_reason=%r "
+        "provider_conversation=%s browser_provider_conversation=%s voice_call=%s chat_session=%s",
+        event,
+        connection_state,
+        close_code,
+        close_reason,
+        voice_call.provider_conversation_id,
+        browser_provider_id,
+        voice_call.pk,
+        voice_call.chat_session_id,
+    )
+    return JsonResponse({"ok": True})
+
+
+@login_required
+def student_voice_introduction(request, session_id):
+    """Stream the presentation-only introduction in a neutral narrator voice."""
+    if not _can_use_voice_practice(request.user):
+        return redirect("vip:home")
+    session = get_object_or_404(
+        ChatSession.objects.select_related("role_prompt"),
+        pk=session_id,
+        student=request.user,
+        interaction_mode=ChatSession.InteractionMode.VOICE,
+    )
+    introduction = _simulation_introduction(session=session)
+    scenario = parse_scenario_prompt(session.scenario_content or getattr(session.role_prompt, "content", ""))
+    provider_api_key = elevenlabs_api_key()
+    if not provider_api_key or not scenario.introduction_voice_id:
+        return HttpResponseBadRequest("Narrator audio is not configured.")
+
+    try:
+        stream = ElevenLabsSpeechStream(
+            provider_api_key,
+            voice_id=scenario.introduction_voice_id,
+            text=introduction,
+        )
+        result = StreamingHttpResponse(stream, content_type="audio/mpeg")
+        result["Cache-Control"] = "no-store"
+        result["X-Accel-Buffering"] = "no"
+        return result
+    except Exception:
+        logger.exception("Narrator speech generation failed session=%s", session.id)
+        return HttpResponse("Narrator audio is temporarily unavailable. Please try again.", status=503)
 
 
 @login_required
@@ -1273,25 +1882,22 @@ def student_download_session(request, session_id):
         pk=session_id,
         student=request.user,
     )
-    messages = session.messages.order_by("created_at")
+    messages = _conversation_messages(session)
 
     lines = [
         f"Student: {session.student.username}",
         f"Prompt: {session.role_prompt.title if session.role_prompt else 'None'}",
         f"Session ID: {session.id}",
+        f"Mode: {session.get_interaction_mode_display()}",
         f"Started: {session.started_at}",
+        "",
+        f"SIMULATION: {_simulation_introduction(session=session)}",
         "",
     ]
     for message in messages:
-        speaker = "Student" if message.sender == ChatMessage.Sender.STUDENT else "Assistant"
+        speaker = "YOU" if message.sender == ChatMessage.Sender.STUDENT else _scenario_presentation(session=session)["character_label"].upper()
         content = message.content
-        voice_metadata = ""
-        if message.sender == ChatMessage.Sender.ASSISTANT:
-            content, embedded_voice = split_dialogue_and_voice(content)
-            voice_metadata = (message.voice_metadata or embedded_voice).strip()
         lines.append(f"[{message.created_at}] {speaker}: {content}")
-        if voice_metadata:
-            lines.append(f"Voice metadata: {voice_metadata}")
         lines.append("")
 
     response = HttpResponse("\n".join(lines), content_type="text/plain")
@@ -1312,7 +1918,8 @@ def student_message_tts(request, message_id):
     if message.sender != ChatMessage.Sender.ASSISTANT:
         return HttpResponseBadRequest("TTS is only available for assistant messages.")
 
-    dialogue, embedded_emotion = split_dialogue_and_voice(message.content)
+    dialogue = clean_dialogue_for_display(message.content)
+    _legacy_dialogue, embedded_emotion = split_dialogue_and_voice(message.content)
     emotion = getattr(message, "voice_metadata", "") or embedded_emotion
     use_emotion_voice = request.GET.get("emotion", "1") != "0"
     if not emotion:
@@ -1328,7 +1935,7 @@ def student_message_tts(request, message_id):
         stream = SpeechStream(
             api_key,
             model=os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
-            voice="onyx" if re.search(r"\bmale voice\b", emotion.lower()) else "coral",
+            voice="coral",
             input=dialogue or "No spoken dialogue.",
             instructions=emotion if use_emotion_voice else "Speak naturally and clearly.",
             response_format="mp3",

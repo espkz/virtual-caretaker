@@ -1,7 +1,12 @@
 import re
 from dataclasses import asdict, dataclass
 
-from .prompt_utils import find_section_by_aliases, split_markdown_sections
+from .prompt_utils import (
+    find_exact_section_by_aliases,
+    find_section_by_aliases,
+    normalize_voice_style,
+    split_markdown_sections,
+)
 
 
 DEFAULT_LEARNER_ROLE = "the learner in this simulation"
@@ -46,6 +51,8 @@ class Scenario:
     background_context: str = ""
     topics: tuple[ScenarioTopic, ...] = ()
     simulation_mode: str = "roleplay"
+    introduction_voice_id: str = ""
+    roleplay_voice_id: str = ""
 
     def to_state(self):
         state = asdict(self)
@@ -55,6 +62,9 @@ class Scenario:
     @classmethod
     def from_state(cls, state):
         values = dict(state)
+        values.setdefault("voice_gender", "")
+        values.setdefault("introduction_voice_id", "")
+        values.setdefault("roleplay_voice_id", "")
         values["objectives"] = tuple(
             objective
             if isinstance(objective, ScenarioObjective)
@@ -74,7 +84,7 @@ class Scenario:
         return cls(**values)
 
     def voice_metadata(self):
-        return f"{self.voice_gender} voice, {self.voice_style}"
+        return normalize_voice_style(self.voice_style)
 
 
 def parse_scenario_prompt(role_text: str) -> Scenario:
@@ -83,10 +93,13 @@ def parse_scenario_prompt(role_text: str) -> Scenario:
     def section(aliases):
         return find_section_by_aliases(sections, aliases).strip()
 
+    def exact_section(aliases):
+        return find_exact_section_by_aliases(sections, aliases).strip()
+
     gender = (section(["voice gender", "voice"]) or "female").lower()
     if gender not in {"male", "female"}:
         gender = "female"
-    voice_style = section(["voice style", "voice instructions"]) or "speak naturally and clearly"
+    voice_style = normalize_voice_style(section(["voice style", "voice instructions"]))
     middle = section(["middle", "conversation progression: middle"])
     return Scenario(
         simulation_mode=section(["simulation mode"]).lower() or "roleplay",
@@ -95,6 +108,8 @@ def parse_scenario_prompt(role_text: str) -> Scenario:
         learner=section(["learner role", "user role"]) or DEFAULT_LEARNER_ROLE,
         voice_gender=gender,
         voice_style=voice_style,
+        introduction_voice_id=exact_section(["introduction voice", "narrator voice"]),
+        roleplay_voice_id=exact_section(["roleplay voice", "character voice"]),
         introduction=section(["introduction", "introduction: greeting"]),
         opening_line=section(["opening line"]),
         beginning=section(["beginning", "conversation progression: beginning"]),

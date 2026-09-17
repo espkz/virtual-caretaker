@@ -21,6 +21,12 @@
     <a class="tab-link" href="{% url 'vip:professor_manage_accounts' %}">Student Accounts</a>
 </nav>
 
+{% if messages %}
+    {% for message in messages %}
+    <div class="flash-message {{ message.tags }}" role="status">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
 {% if current_tab == "prompts" %}
 <section class="panel">
 <h2>Role Prompts</h2>
@@ -39,7 +45,9 @@
         <tr>
             <td>{{ prompt.title }}<br><small>{{ prompt.simulation_mode_label }}</small></td>
             <td>
-                {% if prompt.is_active %}
+                {% if not prompt.is_complete %}
+                    <span class="status-pill">Incomplete</span>
+                {% elif prompt.is_active %}
                     <span class="status-pill active">Active</span>
                 {% else %}
                     <span class="status-pill">Inactive</span>
@@ -48,7 +56,9 @@
             <td>{{ prompt.updated_at }}</td>
             <td>
                 <div class="table-actions">
+                {% if prompt.is_complete %}
                 <a class="action-btn" href="{% url 'vip:professor_test_chat' %}?prompt={{ prompt.id }}">Test</a>
+                {% endif %}
                 <a class="action-btn" href="{% url 'vip:edit_prompt' prompt.id %}">Edit</a>
                 <a class="action-btn" href="{% url 'vip:professor_download_prompt_txt' prompt.id %}">Download .txt</a>
                 {% if prompt.is_active %}
@@ -56,11 +66,13 @@
                         {% csrf_token %}
                         <button class="action-btn" type="submit">Deactivate</button>
                     </form>
-                {% else %}
+                {% elif prompt.is_complete %}
                     <form method="post" action="{% url 'vip:set_active_prompt' prompt.id %}">
                         {% csrf_token %}
                         <button class="action-btn" type="submit">Activate</button>
                     </form>
+                {% else %}
+                    <span class="muted">Complete all required fields to test or activate.</span>
                 {% endif %}
                     <form method="post" action="{% url 'vip:delete_prompt' prompt.id %}">
                         {% csrf_token %}

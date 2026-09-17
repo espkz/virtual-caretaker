@@ -49,13 +49,9 @@ How the character naturally wraps up.
 ## Closing
 Exact closing line, if required.
 
-## Voice Gender
-Choose one:
-- female
-- male
+## Introduction Voice
+
+## Roleplay Voice
 
 ## Voice Style
-Describe speaking style instructions.
-Examples:
-- warm, reassuring, relatively slow pace
-- calm, quiet, shaky from emotion
+natural

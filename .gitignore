@@ -8,9 +8,13 @@ django_key.txt
 !.env.example
 vipdjango/staticfiles/
 users.txt
+.env
+openai.json
+django_key.txt
 
 # Local databases
 vipdjango/db.sqlite3
+vipdjango/staticfiles/
 
 # Python artifacts
 **/__pycache__/

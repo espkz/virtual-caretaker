@@ -22,12 +22,16 @@
         {% endif %}
     </div>
     <div class="meta-item"><strong>Prompt:</strong> {% if session.role_prompt %}{{ session.role_prompt.title }}{% else %}None{% endif %}</div>
+    <div class="meta-item"><strong>Mode:</strong> {{ session.get_interaction_mode_display }}</div>
     <div class="meta-item"><strong>Started:</strong> {{ session.started_at }}</div>
     <div class="meta-item"><strong>Ended:</strong> {% if session.ended_at %}{{ session.ended_at }}{% else %}In progress{% endif %}</div>
 </div>
 
-{% if rendered_messages %}
 <div class="chat-list">
+    <article class="chat-message simulation">
+        <div class="chat-speaker">SIMULATION</div>
+        <div class="pre-wrap">{{ simulation_introduction }}</div>
+    </article>
     {% for message in rendered_messages %}
     <article class="chat-message {{ message.sender }}">
         <div class="chat-meta">
@@ -37,9 +41,6 @@
     </article>
     {% endfor %}
 </div>
-{% else %}
-<p>No messages were saved for this session.</p>
-{% endif %}
 
 <p><a href="{% url 'vip:professor_dashboard' %}?tab=logs">Back to Student Logs</a></p>
 {% endblock %}

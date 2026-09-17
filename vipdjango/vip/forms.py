@@ -1,6 +1,11 @@
 from django import forms
 from .models import RolePrompt
-from .prompt_utils import find_section_by_aliases, normalize_gender, split_markdown_sections
+from .prompt_utils import (
+    find_exact_section_by_aliases,
+    find_section_by_aliases,
+    normalize_voice_style,
+    split_markdown_sections,
+)
 
 
 class RolePromptForm(forms.Form):
@@ -8,65 +13,81 @@ class RolePromptForm(forms.Form):
     is_active = forms.BooleanField(required=False)
     simulation_mode = forms.ChoiceField(
         choices=[("roleplay", "Patient or family roleplay"), ("clinician_demo", "Clinician demonstration")],
-        initial="roleplay", required=False,
+        initial="roleplay",
         help_text="Clinician demonstration answers the human's concerns. Also set the Role, User Role, guidance, and closing for that clinician; this choice does not rewrite them.",
     )
 
     role = forms.CharField(widget=forms.Textarea(attrs={"rows": 5}))
     background_context = forms.CharField(
-        required=False,
         widget=forms.Textarea(attrs={"rows": 8}),
         help_text="Scenario facts, circumstances, beliefs, feelings, and experiences.",
     )
     learner_role = forms.CharField(
-        required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
         help_text="Who is the human participant in this simulation.",
     )
     introduction = forms.CharField(
-        required=False,
         widget=forms.Textarea(attrs={"rows": 5}),
-        help_text="Optional fixed message shown when a new chat starts.",
+        help_text="Fixed message shown when a new chat starts.",
     )
     conversation_objectives = forms.CharField(
-        required=False,
         widget=forms.Textarea(attrs={"rows": 10}),
         help_text=(
             "Use one ### heading per concern, with possible expressions and resolution guidance underneath."
         ),
     )
-    voice_gender = forms.ChoiceField(choices=[("female", "female"), ("male", "male")], initial="female")
+    introduction_voice_id = forms.ChoiceField(
+        choices=(),
+        help_text="Voice used only for the simulation introduction.",
+    )
+    roleplay_voice_id = forms.ChoiceField(
+        choices=(),
+        help_text="Voice used for the roleplay character during the conversation.",
+    )
     voice_style = forms.CharField(
-        required=False,
-        widget=forms.Textarea(attrs={"rows": 2}),
-        help_text="Optional speaking style. Example: warm, calm, relatively slow.",
+        max_length=240,
+        widget=forms.TextInput(),
+        help_text="Add one- or two-word delivery tags. Tags are stored in Markdown separated by commas.",
     )
     opening_line = forms.CharField(
-        required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
-        help_text="Optional. Shown as the first in-character response after the learner greets the character.",
+        help_text="Shown as the first in-character response after the learner greets the character.",
     )
-    beginning = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 6}))
+    beginning = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}))
     begin_to_middle_cues = forms.CharField(
-        required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
-        help_text="Optional. One cue per line (bullet points are fine).",
+        help_text="One cue per line (bullet points are fine).",
     )
     middle = forms.CharField(
-        required=False, widget=forms.Textarea(attrs={"rows": 8}),
+        widget=forms.Textarea(attrs={"rows": 8}),
         help_text="For short core-question practice, use a top-level '- Theme' bullet for each theme and indented numbered questions beneath it. The opening counts as the first concern of the first theme. The app selects two concerns per theme and allows one clarification per theme.",
     )
     middle_to_ending_cues = forms.CharField(
-        required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
-        help_text="Optional. One cue per line (bullet points are fine).",
+        help_text="One cue per line (bullet points are fine).",
     )
-    ending = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 6}))
+    ending = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}))
     closing = forms.CharField(
-        required=False,
         widget=forms.Textarea(attrs={"rows": 4}),
-        help_text="Optional scenario-provided closing guidance.",
+        help_text="Scenario-provided closing guidance.",
     )
+
+    def __init__(self, *args, voice_choices=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        choices = [("", "Select an ElevenLabs voice")]
+        choices.extend(list(voice_choices or ()))
+        known_ids = {value for value, _label in choices}
+        for field_name in ("introduction_voice_id", "roleplay_voice_id"):
+            selected = ""
+            if self.is_bound:
+                selected = (self.data.get(field_name) or "").strip()
+            elif self.initial:
+                selected = (self.initial.get(field_name) or "").strip()
+            field_choices = list(choices)
+            if selected and selected not in known_ids:
+                field_choices.append((selected, "Saved voice (provider list currently unavailable)"))
+            self.fields[field_name].choices = field_choices
+
     @classmethod
     def initial_from_prompt(cls, prompt):
         return cls.initial_from_content(
@@ -78,7 +99,6 @@ class RolePromptForm(forms.Form):
     @classmethod
     def initial_from_content(cls, content, title="", is_active=False):
         sections = split_markdown_sections(content)
-        voice_gender = normalize_gender(find_section_by_aliases(sections, ["voice gender"]), default="female")
         role = find_section_by_aliases(sections, ["role", "role summary", "character"])
         if not role:
             role = (content or "").strip()
@@ -108,7 +128,12 @@ class RolePromptForm(forms.Form):
             "conversation_objectives": find_section_by_aliases(
                 sections, ["conversation objectives", "conversation goals", "objectives", "goals"]
             ),
-            "voice_gender": voice_gender,
+            "introduction_voice_id": find_exact_section_by_aliases(
+                sections, ["introduction voice", "narrator voice"]
+            ).strip(),
+            "roleplay_voice_id": find_exact_section_by_aliases(
+                sections, ["roleplay voice", "character voice"]
+            ).strip(),
             "voice_style": find_section_by_aliases(sections, ["voice style", "voice instructions"]),
             "opening_line": find_section_by_aliases(sections, ["opening line"]),
             "beginning": find_section_by_aliases(sections, ["beginning", "conversation progression: beginning"]),
@@ -149,16 +174,20 @@ class RolePromptForm(forms.Form):
             subsection("Middle to Ending Transition", data.get("middle_to_ending_cues")),
             subsection("Ending", data.get("ending")),
             block("Closing", data.get("closing")),
-            block("Voice Gender", data.get("voice_gender")),
+            block("Introduction Voice", data.get("introduction_voice_id")),
+            block("Roleplay Voice", data.get("roleplay_voice_id")),
             block("Voice Style", data.get("voice_style")),
         ]
         return "\n".join(parts).strip() + "\n"
 
-    def clean_voice_gender(self):
-        value = (self.cleaned_data.get("voice_gender") or "").strip().lower()
-        if value not in {"female", "male"}:
-            return "female"
-        return value
+    def clean_voice_style(self):
+        value = (self.cleaned_data.get("voice_style") or "").strip()
+        normalized = normalize_voice_style(value, default="")
+        if not normalized:
+            raise forms.ValidationError(
+                "Each voice-style tag must contain one or two words and cannot contain role, state, or system instructions."
+            )
+        return normalized
 
 
 class StudentAccountCreateForm(forms.Form):

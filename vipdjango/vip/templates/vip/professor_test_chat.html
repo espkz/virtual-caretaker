@@ -19,6 +19,7 @@
             <h2>Scenario (including drafts)</h2>
             {% if active_prompts %}
             <form method="get">
+                {% if show_mode_selection %}<input type="hidden" name="new" value="1">{% endif %}
                 <select class="prompt-select" name="prompt" onchange="this.form.submit()">
                     {% for prompt in active_prompts %}
                     <option value="{{ prompt.id }}" {% if selected_prompt and selected_prompt.id == prompt.id %}selected{% endif %}>
@@ -26,9 +27,6 @@
                     </option>
                     {% endfor %}
                 </select>
-                {% if current_session %}
-                <input type="hidden" name="session" value="{{ current_session.id }}">
-                {% endif %}
             </form>
             <form method="post">
                 {% csrf_token %}
@@ -48,122 +46,214 @@
                 {% for session in sessions %}
                 <li>
                     <div><strong>#{{ session.id }}</strong> {% if session.role_prompt %}- {{ session.role_prompt.title }}{% endif %}</div>
-                    <div class="chat-meta">{{ session.started_at }}</div>
-                    <a href="{% url 'vip:professor_test_chat' %}?session={{ session.id }}{% if session.role_prompt %}&prompt={{ session.role_prompt.id }}{% endif %}">Open</a>
-                    |
-                    <a href="{% url 'vip:student_download_session' session.id %}">Download</a>
+                    <div class="chat-meta">{{ session.get_interaction_mode_display }} · {{ session.started_at }}</div>
+                    <div class="session-actions">
+                        <a href="{% url 'vip:professor_test_chat' %}?session={{ session.id }}{% if session.role_prompt %}&prompt={{ session.role_prompt.id }}{% endif %}">Open</a>
+                        <a href="{% url 'vip:student_download_session' session.id %}">Download</a>
+                    </div>
                     <form class="mt-6" method="post">
                         {% csrf_token %}
                         <input type="hidden" name="action" value="delete_session">
                         <input type="hidden" name="target_session_id" value="{{ session.id }}">
                         {% if selected_prompt %}<input type="hidden" name="prompt_id" value="{{ selected_prompt.id }}">{% endif %}
-                        <button type="submit" onclick="return confirm('Delete this test session?');">Delete Session</button>
+                        <button type="submit" class="danger" onclick="return confirm('Delete this test session?');">Delete Session</button>
                     </form>
                 </li>
                 {% endfor %}
             </ul>
             {% else %}
-            <p>No chat logs yet.</p>
+            <p>No test sessions yet.</p>
             {% endif %}
         </section>
     </aside>
 
     <section>
-        <div class="panel">
-            <h2>
-                Chat
-                {% if selected_prompt %}
-                - {{ selected_prompt.title }}
-                {% endif %}
-            </h2>
+        <div class="panel conversation-panel">
+            {% if show_mode_selection %}
+            <section id="mode-selection" class="mode-selection" aria-labelledby="new-conversation-heading">
+                <p class="eyebrow">New conversation</p>
+                <h2 id="new-conversation-heading">{{ selected_prompt.title }}</h2>
+                <div class="scenario-briefing">
+                    <p><strong>Conversation partner:</strong> {{ scenario_character }}</p>
+                    <p><strong>Your role:</strong> {{ scenario_learner }}</p>
+                    {% if scenario_briefing_context %}<p>{{ scenario_briefing_context }}</p>{% endif %}
+                </div>
+                <h3>How would you like to practice?</h3>
+                {% if error_message %}<div class="error-text">{{ error_message }}</div>{% endif %}
+                <div class="mode-grid">
+                    <form method="post" class="mode-card voice-mode-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="start_session">
+                        <input type="hidden" name="mode" value="voice">
+                        <input type="hidden" name="prompt_id" value="{{ selected_prompt.id }}">
+                        <span class="mode-icon" aria-hidden="true">🎤</span>
+                        <h3>Voice Conversation</h3>
+                        <p>Practice as a live spoken conversation. The microphone stays active between turns.</p>
+                        <button type="submit" id="voice-start-choice" class="primary" {% if not voice_enabled %}disabled{% endif %}>Start Voice Conversation</button>
+                        {% if not voice_configuration_ready %}<small class="muted">Select introduction and roleplay voices in the prompt editor first.</small>{% endif %}
+                        {% if not speech_engine_enabled %}<small>Voice is not configured on this server.</small>{% endif %}
+                    </form>
+                    <form method="post" class="mode-card">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="start_session">
+                        <input type="hidden" name="mode" value="text">
+                        <input type="hidden" name="prompt_id" value="{{ selected_prompt.id }}">
+                        <span class="mode-icon" aria-hidden="true">💬</span>
+                        <h3>Text Conversation</h3>
+                        <p>Type your responses in a lightweight text-only session with no voice connection.</p>
+                        <button type="submit" class="primary">Start Text Conversation</button>
+                    </form>
+                </div>
+            </section>
+            {% endif %}
 
-            <p class="muted">Practice with an AI simulated character. Type your reply, or use the microphone and review your words before sending. You can close the conversation at any time.</p>
-            <div class="chat-window" role="log" aria-label="Conversation">
-                {% if rendered_messages %}
-                    {% for message in rendered_messages %}
-                    <article class="chat-message {{ message.sender }}">
-                        <div class="chat-meta">{{ message.sender_display }} | {{ message.created_at }}</div>
-                        <div>{{ message.display_content|linebreaksbr }}</div>
-                        {% if message.sender == "assistant" and message.voice_enabled %}
-                        <button type="button" class="tts-button" data-message-id="{{ message.id }}" data-tts-url="{% url 'vip:student_message_tts' message.id %}">
-                            Play Voice
-                        </button>
-                        <div class="message-audio-controls">
-                            <div class="audio-status">Voice player ready.</div>
-                            <audio controls preload="none"></audio>
-                            <button type="button" class="tts-stop">Stop Voice</button>
-                        </div>
+            {% if is_voice_session or show_mode_selection %}
+            <section
+                id="voice-practice"
+                class="voice-call{% if show_mode_selection %} is-hidden{% endif %}"
+                data-enabled="{% if voice_enabled %}1{% else %}0{% endif %}"
+                data-prompt-id="{{ selected_prompt.id|default:'' }}"
+                data-session-id="{{ current_session.id|default:'' }}"
+                data-force-new="{% if show_mode_selection %}1{% else %}0{% endif %}"
+                data-session-ended="{% if current_session and current_session.ended_at %}1{% else %}0{% endif %}"
+                data-character-label="{{ character_label }}"
+                data-token-url="{% url 'vip:student_voice_token' %}"
+                data-bind-url="{% url 'vip:student_voice_bind' %}"
+                data-ready-url="{% url 'vip:student_voice_ready' %}"
+                data-end-url="{% url 'vip:student_voice_end' %}"
+                data-completion-url="{% url 'vip:student_voice_completion' %}"
+                data-mute-url="{% url 'vip:student_voice_mute' %}"
+                data-diagnostic-url="{% url 'vip:student_voice_connection_diagnostic' %}"
+                aria-labelledby="voice-heading"
+            >
+                <header class="conversation-heading">
+                    <div>
+                        <p class="eyebrow">Voice Conversation</p>
+                        <h2 id="voice-heading">{{ character_label }}</h2>
+                    </div>
+                    <time id="voice-duration" class="call-duration" aria-label="Call duration">00:00</time>
+                </header>
+
+                <div class="call-stage">
+                    <div class="call-orb" aria-hidden="true"></div>
+                    <output id="voice-connection-status" class="call-status" aria-live="polite">
+                        {% if current_session and current_session.ended_at %}Ended{% elif not voice_enabled %}Error{% else %}Ready to connect{% endif %}
+                    </output>
+                    <p id="voice-state-detail" class="muted">
+                        {% if current_session and current_session.ended_at %}This saved voice conversation has ended.{% elif not voice_enabled %}Voice is not configured on this server. The saved transcript remains available.{% else %}Your microphone will start after the simulation introduction.{% endif %}
+                    </p>
+                    {% if not current_session or not current_session.ended_at %}
+                    <button type="button" id="voice-start" class="primary" {% if not voice_enabled %}disabled{% endif %}>Start Call</button>
+                    <div id="voice-controls" class="call-controls" hidden>
+                        <button type="button" id="voice-mute" aria-pressed="false">🎤 Mute</button>
+                        <button type="button" id="voice-end" class="danger">☎ End Call</button>
+                    </div>
+                    {% endif %}
+                    <div id="voice-connection-lost" class="connection-lost" role="alert" hidden>
+                        <strong>Connection lost</strong>
+                        <span>The voice connection ended unexpectedly. Your saved transcript is available.</span>
+                        <button type="button" id="voice-open-saved-transcript" class="primary" disabled>Open saved transcript</button>
+                    </div>
+                </div>
+
+                <section class="transcript-section" aria-labelledby="voice-transcript-heading">
+                    <div class="transcript-heading">
+                        <h3 id="voice-transcript-heading">Transcript</h3>
+                        {% if current_session %}
+                        <a id="voice-download" href="{% url 'vip:student_download_session' current_session.id %}">Download</a>
+                        {% else %}
+                        <a id="voice-download" class="is-hidden" href="#">Download</a>
                         {% endif %}
-                    </article>
-                    {% endfor %}
-                {% else %}
-                <p>Start a new test chat by sending your first message.</p>
+                    </div>
+                    <div id="voice-live-transcript" class="voice-live-transcript" role="log" aria-label="Live voice transcript">
+                        <article class="voice-transcript-message simulation" data-role="simulation">
+                            <strong>SIMULATION</strong>
+                            <span>{{ simulation_introduction|linebreaksbr }}</span>
+                        </article>
+                        {% for message in rendered_messages %}
+                        <article class="voice-transcript-message {% if message.sender == 'assistant' %}agent{% else %}user{% endif %}" data-role="{% if message.sender == 'assistant' %}agent{% else %}user{% endif %}">
+                            <strong>{% if message.sender == 'assistant' %}{{ character_label|upper }}{% else %}YOU{% endif %}</strong>
+                            <span>{{ message.display_content|linebreaksbr }}</span>
+                        </article>
+                        {% endfor %}
+                    </div>
+                </section>
+
+                {% if current_session and current_session.ended_at %}
+                <form method="post" class="mt-8">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="new_session">
+                    <input type="hidden" name="prompt_id" value="{{ selected_prompt.id }}">
+                    <button type="submit">New Conversation</button>
+                </form>
                 {% endif %}
+                <audio id="narrator-audio" preload="none" hidden></audio>
+            </section>
+            {% endif %}
+
+            {% if is_text_session %}
+            <header class="conversation-heading">
+                <div>
+                    <p class="eyebrow">Text Conversation</p>
+                    <h2>{{ character_label }}</h2>
+                </div>
+                <a href="{% url 'vip:student_download_session' current_session.id %}">Download transcript</a>
+            </header>
+            <div class="chat-window" role="log" aria-label="Conversation transcript">
+                <article class="chat-message simulation">
+                    <div class="chat-speaker">SIMULATION</div>
+                    <div>{{ simulation_introduction|linebreaksbr }}</div>
+                </article>
+                {% for message in rendered_messages %}
+                <article class="chat-message {{ message.sender }}">
+                    <div class="chat-speaker">{{ message.sender_display }}</div>
+                    <div class="chat-meta">{{ message.created_at }}</div>
+                    <div>{{ message.display_content|linebreaksbr }}</div>
+                </article>
+                {% endfor %}
             </div>
 
-            {% if current_session and current_session.ended_at %}
-            <div class="closed-banner">
-                This conversation is closed at {{ current_session.ended_at }}.
-            </div>
-            <div class="row-actions mb-10">
-                <a href="{% url 'vip:student_download_session' current_session.id %}">Download This Closed Conversation</a>
-            </div>
+            {% if current_session.ended_at %}
+            <div class="closed-banner">This conversation ended at {{ current_session.ended_at }}.</div>
             <form method="post">
                 {% csrf_token %}
-                {% if selected_prompt %}
                 <input type="hidden" name="prompt_id" value="{{ selected_prompt.id }}">
-                {% endif %}
                 <input type="hidden" name="action" value="new_session">
-                <button type="submit">Start New Conversation</button>
+                <button type="submit">New Conversation</button>
             </form>
             {% else %}
             <form class="message-form" method="post" action="{% url 'vip:professor_test_chat' %}">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="send_message">
-                <input type="hidden" id="voice-turn-id" name="turn_id" value="{{ pending_message.turn_id|default:'' }}">
-                {% if selected_prompt %}
+                <input type="hidden" id="conversation-turn-id" name="turn_id" value="{{ pending_message.turn_id|default:'' }}">
                 <input type="hidden" name="prompt_id" value="{{ selected_prompt.id }}">
-                {% endif %}
-                {% if current_session %}
                 <input type="hidden" name="session_id" value="{{ current_session.id }}">
-                {% endif %}
-                {% if force_new %}
-                <input type="hidden" name="force_new" value="1">
-                {% endif %}
-                {% if error_message %}
-                <div class="error-text">{{ error_message }}</div>
-                {% endif %}
-                <label class="tts-toggle">
-                    <input type="checkbox" id="emotion-voice-toggle" checked>
-                    Use expressive AI voice.
-                </label>
-                <label class="tts-toggle"><input type="checkbox" id="autoplay-voice-toggle"> Play responses aloud automatically</label>
+                {% if force_new %}<input type="hidden" name="force_new" value="1">{% endif %}
+                {% if error_message %}<div class="error-text">{{ error_message }}</div>{% endif %}
                 {% if pending_message %}<p>Your last message is saved. Retry its response before sending another message.</p>{% endif %}
-                <div id="stt-status" class="voice-status" role="status" aria-live="polite"></div>
-                <div class="compose-row">
+                <label for="student-message-input">Your response</label>
+                <div class="compose-row text-compose-row">
                     <textarea id="student-message-input" name="message" aria-label="Your response" placeholder="Type your message here..." required {% if pending_message %}readonly{% endif %}>{{ pending_message.content|default:'' }}</textarea>
-                    <button type="submit" class="send-button-inline" id="send-message-btn">{% if pending_message %}Retry response{% else %}Send{% endif %}</button>
-                    <button type="button" id="stt-toggle" class="mic-button" aria-label="Toggle microphone">Mic</button>
+                    <button type="submit" class="send-button-inline primary" id="send-message-btn">{% if pending_message %}Retry response{% else %}Send{% endif %}</button>
                 </div>
-                <div class="row-actions">
-                    {% if current_session %}
-                    <a href="{% url 'vip:student_download_session' current_session.id %}">Download Current Log</a>
-                    {% endif %}
-                </div>
-                {% if current_session %}
+                <div id="message-status" class="voice-status" role="status" aria-live="polite"></div>
                 <div class="row-actions mt-8">
                     <button type="submit" name="action" value="close_conversation" formnovalidate>Close Conversation</button>
-                    <button type="submit" name="action" value="delete_session" onclick="return confirm('Delete this test session?');" formnovalidate>
-                        Delete This Session
-                    </button>
                 </div>
-                {% endif %}
             </form>
             {% endif %}
+            {% endif %}
 
+            {% if not selected_prompt %}<p>No scenarios yet. Create or upload one in the Prompts tab.</p>{% endif %}
         </div>
     </section>
 </div>
 
 <script src="{% static 'vip/chat.js' %}" defer></script>
+{% if voice_enabled %}
+    {% if show_mode_selection or is_voice_session %}
+    <script src="https://unpkg.com/@elevenlabs/client@1.25.0/dist/lib.iife.js" defer></script>
+    <script src="{% static 'vip/voice_chat.js' %}" defer></script>
+    {% endif %}
+{% endif %}
 {% endblock %}

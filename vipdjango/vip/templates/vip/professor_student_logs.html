@@ -30,6 +30,7 @@
         <tr>
             <th>Session</th>
             <th>Prompt</th>
+            <th>Mode</th>
             <th>Started</th>
             <th>Ended</th>
             <th>Messages</th>
@@ -41,6 +42,7 @@
         <tr>
             <td>#{{ session.id }}</td>
             <td>{% if session.role_prompt %}{{ session.role_prompt.title }}{% else %}None{% endif %}</td>
+            <td>{{ session.get_interaction_mode_display }}</td>
             <td>{{ session.started_at }}</td>
             <td>{% if session.ended_at %}{{ session.ended_at }}{% else %}In progress{% endif %}</td>
             <td>{{ session.messages.count }}</td>

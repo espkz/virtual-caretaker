@@ -53,29 +53,124 @@
         padding: 12px;
         min-height: 220px;
     }
+
+    .voice-preview-control {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+        font-size: 0.9rem;
+    }
+
+    .voice-preview-name {
+        color: var(--muted);
+        font-weight: 650;
+    }
+
+    .voice-preview-control button {
+        min-height: 30px;
+        padding: 5px 9px;
+        font-size: 0.86rem;
+    }
+
+    .voice-preview-status {
+        color: var(--muted);
+    }
+
+    .voice-preview-status.error {
+        color: var(--danger);
+    }
+
+    .required-mark {
+        color: var(--danger);
+    }
+
+    .voice-style-editor {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        flex-wrap: wrap;
+        min-height: 44px;
+        padding: 7px 9px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: #ffffff;
+    }
+
+    .voice-style-editor:focus-within {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    .voice-style-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent-strong);
+        font-size: 0.88rem;
+        font-weight: 650;
+    }
+
+    .voice-style-tag.invalid {
+        background: var(--danger-soft);
+        color: var(--danger);
+    }
+
+    .voice-style-tag button {
+        min-height: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        line-height: 1;
+    }
+
+    #voice-style-entry {
+        flex: 1 1 190px;
+        width: auto;
+        min-width: 160px;
+        padding: 4px 2px;
+        border: 0;
+        outline: 0;
+    }
+
+    #voice-style-tags {
+        display: contents;
+    }
 </style>
 
 <div class="prompt-layout">
     <section class="panel">
         <h2>Prompt Builder</h2>
+        <p class="muted"><span class="required-mark">*</span> All prompt fields are required. Incomplete prompts remain inactive and cannot be tested.</p>
         <div class="tabs">
-            <button type="button" class="tab-btn active" data-tab="builder-tab">Builder</button>
-            <button type="button" class="tab-btn" data-tab="introduction-tab">Introduction</button>
+            <button type="button" class="tab-btn{% if not form.introduction.errors %} active{% endif %}" data-tab="builder-tab">Builder</button>
+            <button type="button" class="tab-btn{% if form.introduction.errors %} active{% endif %}" data-tab="introduction-tab">Introduction</button>
             <button type="button" class="tab-btn" data-tab="preview-tab">Live Preview</button>
             <button type="button" class="tab-btn" data-tab="markdown-tab">Full Markdown</button>
         </div>
-        <form method="post">
+        <form method="post" novalidate>
             {% csrf_token %}
 
-            {% if form.non_field_errors %}
-            <div class="errors">
-                {{ form.non_field_errors }}
+            {% if form.errors %}
+            <div class="errors" role="alert">
+                <strong>The prompt was not saved. Complete the required fields below:</strong>
+                <ul>
+                    {% for field in form %}
+                        {% for error in field.errors %}<li>{{ field.label }}: {{ error }}</li>{% endfor %}
+                    {% endfor %}
+                    {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+                </ul>
             </div>
             {% endif %}
 
-            <div class="tab-panel active" id="builder-tab">
+            <div class="tab-panel{% if not form.introduction.errors %} active{% endif %}" id="builder-tab">
                 <div class="field">
-                    <label for="{{ form.title.id_for_label }}">Title</label>
+                    <label for="{{ form.title.id_for_label }}">Title <span class="required-mark">*</span></label>
                     {{ form.title }}
                     {% if form.title.errors %}
                     <div class="errors">{{ form.title.errors }}</div>
@@ -83,7 +178,7 @@
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.role.id_for_label }}">Role</label>
+                    <label for="{{ form.role.id_for_label }}">Role <span class="required-mark">*</span></label>
                     {{ form.role }}
                     {% if form.role.errors %}
                     <div class="errors">{{ form.role.errors }}</div>
@@ -91,31 +186,34 @@
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.simulation_mode.id_for_label }}">Simulation Mode</label>
+                    <label for="{{ form.simulation_mode.id_for_label }}">Simulation Mode <span class="required-mark">*</span></label>
                     {{ form.simulation_mode }}
                     <p class="preview-note">{{ form.simulation_mode.help_text }}</p>
                     {% if form.simulation_mode.errors %}<div class="errors">{{ form.simulation_mode.errors }}</div>{% endif %}
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.background_context.id_for_label }}">Background and Context</label>
+                    <label for="{{ form.background_context.id_for_label }}">Background and Context <span class="required-mark">*</span></label>
                     {{ form.background_context }}
                     {% if form.background_context.help_text %}
                     <p class="preview-note">{{ form.background_context.help_text }}</p>
                     {% endif %}
+                    {% if form.background_context.errors %}<div class="errors">{{ form.background_context.errors }}</div>{% endif %}
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.learner_role.id_for_label }}">User Role</label>
+                    <label for="{{ form.learner_role.id_for_label }}">User Role <span class="required-mark">*</span></label>
                     {{ form.learner_role }}
+                    {% if form.learner_role.errors %}<div class="errors">{{ form.learner_role.errors }}</div>{% endif %}
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.conversation_objectives.id_for_label }}">Conversation Goals</label>
+                    <label for="{{ form.conversation_objectives.id_for_label }}">Conversation Goals <span class="required-mark">*</span></label>
                     {{ form.conversation_objectives }}
                     {% if form.conversation_objectives.help_text %}
                     <p class="preview-note">{{ form.conversation_objectives.help_text }}</p>
                     {% endif %}
+                    {% if form.conversation_objectives.errors %}<div class="errors">{{ form.conversation_objectives.errors }}</div>{% endif %}
                 </div>
 
                 <div class="field">
@@ -123,55 +221,88 @@
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.opening_line.id_for_label }}">Opening Line (Optional)</label>
+                    <label for="{{ form.opening_line.id_for_label }}">Opening Line <span class="required-mark">*</span></label>
                     {{ form.opening_line }}
                     {% if form.opening_line.help_text %}
                     <p class="preview-note">{{ form.opening_line.help_text }}</p>
                     {% endif %}
+                    {% if form.opening_line.errors %}<div class="errors">{{ form.opening_line.errors }}</div>{% endif %}
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.beginning.id_for_label }}">Beginning</label>
+                    <label for="{{ form.beginning.id_for_label }}">Beginning <span class="required-mark">*</span></label>
                     {{ form.beginning }}
+                    {% if form.beginning.errors %}<div class="errors">{{ form.beginning.errors }}</div>{% endif %}
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.begin_to_middle_cues.id_for_label }}">Beginning to Middle Transition</label>
+                    <label for="{{ form.begin_to_middle_cues.id_for_label }}">Beginning to Middle Transition <span class="required-mark">*</span></label>
                     {{ form.begin_to_middle_cues }}
+                    {% if form.begin_to_middle_cues.errors %}<div class="errors">{{ form.begin_to_middle_cues.errors }}</div>{% endif %}
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.middle.id_for_label }}">Middle</label>
+                    <label for="{{ form.middle.id_for_label }}">Middle <span class="required-mark">*</span></label>
                     {{ form.middle }}
                     <p class="preview-note">{{ form.middle.help_text }}</p>
+                    {% if form.middle.errors %}<div class="errors">{{ form.middle.errors }}</div>{% endif %}
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.middle_to_ending_cues.id_for_label }}">Middle to Ending Transition</label>
+                    <label for="{{ form.middle_to_ending_cues.id_for_label }}">Middle to Ending Transition <span class="required-mark">*</span></label>
                     {{ form.middle_to_ending_cues }}
+                    {% if form.middle_to_ending_cues.errors %}<div class="errors">{{ form.middle_to_ending_cues.errors }}</div>{% endif %}
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.ending.id_for_label }}">Ending</label>
+                    <label for="{{ form.ending.id_for_label }}">Ending <span class="required-mark">*</span></label>
                     {{ form.ending }}
+                    {% if form.ending.errors %}<div class="errors">{{ form.ending.errors }}</div>{% endif %}
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.closing.id_for_label }}">Closing Line (Optional)</label>
+                    <label for="{{ form.closing.id_for_label }}">Closing Line <span class="required-mark">*</span></label>
                     {{ form.closing }}
                     {% if form.closing.help_text %}
                     <p class="preview-note">{{ form.closing.help_text }}</p>
                     {% endif %}
+                    {% if form.closing.errors %}<div class="errors">{{ form.closing.errors }}</div>{% endif %}
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.voice_gender.id_for_label }}">Voice Gender</label>
-                    {{ form.voice_gender }}
+                    <label for="{{ form.introduction_voice_id.id_for_label }}">Introduction Voice <span class="required-mark">*</span></label>
+                    {{ form.introduction_voice_id }}
+                    <div class="voice-preview-control" data-voice-preview-for="{{ form.introduction_voice_id.id_for_label }}">
+                        <span class="voice-preview-name" aria-live="polite"></span>
+                        <button type="button" class="voice-preview-button" disabled>▶ Preview</button>
+                        <span class="voice-preview-status" role="status" aria-live="polite"></span>
+                    </div>
+                    <p class="preview-note">{{ form.introduction_voice_id.help_text }}</p>
+                    {{ form.introduction_voice_id.errors }}
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.voice_style.id_for_label }}">Voice Style</label>
-                    {{ form.voice_style }}
+                    <label for="{{ form.roleplay_voice_id.id_for_label }}">Roleplay Voice <span class="required-mark">*</span></label>
+                    {{ form.roleplay_voice_id }}
+                    <div class="voice-preview-control" data-voice-preview-for="{{ form.roleplay_voice_id.id_for_label }}">
+                        <span class="voice-preview-name" aria-live="polite"></span>
+                        <button type="button" class="voice-preview-button" disabled>▶ Preview</button>
+                        <span class="voice-preview-status" role="status" aria-live="polite"></span>
+                    </div>
+                    <p class="preview-note">{{ form.roleplay_voice_id.help_text }}</p>
+                    {{ form.roleplay_voice_id.errors }}
+                </div>
+
+                <div class="field">
+                    <label for="voice-style-entry">Voice Style <span class="required-mark">*</span></label>
+                    {{ form.voice_style.as_hidden }}
+                    <div class="voice-style-editor" id="voice-style-editor">
+                        <div id="voice-style-tags" aria-live="polite"></div>
+                        <input id="voice-style-entry" type="text" autocomplete="off" placeholder="Type a one- or two-word tag, then press Enter" aria-required="true">
+                    </div>
+                    <div id="voice-style-client-error" class="errors" role="status" aria-live="polite"></div>
+                    <p class="preview-note">{{ form.voice_style.help_text }}</p>
+                    {{ form.voice_style.errors }}
                 </div>
 
                 <div class="field">
@@ -179,14 +310,15 @@
                 </div>
             </div>
 
-            <div class="tab-panel" id="introduction-tab">
+            <div class="tab-panel{% if form.introduction.errors %} active{% endif %}" id="introduction-tab">
                 <h3>Introduction</h3>
                 <div class="field">
-                    <label for="{{ form.introduction.id_for_label }}">Introduction Message</label>
+                    <label for="{{ form.introduction.id_for_label }}">Introduction Message <span class="required-mark">*</span></label>
                     {{ form.introduction }}
                     {% if form.introduction.help_text %}
                     <p class="preview-note">{{ form.introduction.help_text }}</p>
                     {% endif %}
+                    {% if form.introduction.errors %}<div class="errors">{{ form.introduction.errors }}</div>{% endif %}
                 </div>
             </div>
 
@@ -211,6 +343,7 @@
 </p>
 
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+{{ voice_preview_urls|json_script:"voice-preview-data" }}
 <script>
     const fieldIds = [
         "id_simulation_mode",
@@ -226,11 +359,113 @@
         "id_middle_to_ending_cues",
         "id_ending",
         "id_closing",
-        "id_voice_gender",
+        "id_introduction_voice_id",
+        "id_roleplay_voice_id",
         "id_voice_style",
     ];
     const preview = document.getElementById("md-preview");
     const sourceView = document.getElementById("md-source");
+    const voiceStyleField = document.getElementById("id_voice_style");
+    const voiceStyleEntry = document.getElementById("voice-style-entry");
+    const voiceStyleTagsContainer = document.getElementById("voice-style-tags");
+    const voiceStyleClientError = document.getElementById("voice-style-client-error");
+    const voiceStyleTags = [];
+
+    function setVoiceStyleClientError(message = "") {
+        voiceStyleClientError.textContent = message;
+    }
+
+    function isValidVoiceStyleTag(tag) {
+        return /^[A-Za-z][A-Za-z'-]*(?:\s+[A-Za-z][A-Za-z'-]*)?$/.test(tag);
+    }
+
+    function syncVoiceStyleValidity() {
+        voiceStyleEntry.required = voiceStyleTags.length === 0;
+        if (!voiceStyleTags.length) {
+            voiceStyleEntry.setCustomValidity("Add at least one voice-style tag.");
+        } else if (voiceStyleTags.some((tag) => !isValidVoiceStyleTag(tag))) {
+            voiceStyleEntry.setCustomValidity("Each tag must contain one or two words.");
+        } else {
+            voiceStyleEntry.setCustomValidity("");
+        }
+    }
+
+    function syncVoiceStyleField() {
+        voiceStyleField.value = voiceStyleTags.join(", ");
+        voiceStyleField.dispatchEvent(new Event("input", {bubbles: true}));
+        syncVoiceStyleValidity();
+    }
+
+    function renderVoiceStyleTags() {
+        voiceStyleTagsContainer.replaceChildren();
+        voiceStyleTags.forEach((tag, index) => {
+            const item = document.createElement("span");
+            item.className = "voice-style-tag";
+            item.classList.toggle("invalid", !isValidVoiceStyleTag(tag));
+            item.append(document.createTextNode(tag));
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.textContent = "×";
+            remove.setAttribute("aria-label", `Remove ${tag}`);
+            remove.addEventListener("click", () => {
+                voiceStyleTags.splice(index, 1);
+                renderVoiceStyleTags();
+                syncVoiceStyleField();
+                voiceStyleEntry.focus();
+            });
+            item.append(remove);
+            voiceStyleTagsContainer.append(item);
+        });
+    }
+
+    function addVoiceStyleTag(value, allowInvalid = false) {
+        const tag = (value || "").trim().toLowerCase().replace(/\s+/g, " ");
+        if (!tag) return true;
+        if (!isValidVoiceStyleTag(tag) && !allowInvalid) {
+            setVoiceStyleClientError("Each tag must contain one or two words.");
+            voiceStyleEntry.setCustomValidity("Each tag must contain one or two words.");
+            return false;
+        }
+        if (!voiceStyleTags.includes(tag)) voiceStyleTags.push(tag);
+        voiceStyleEntry.value = "";
+        setVoiceStyleClientError();
+        renderVoiceStyleTags();
+        syncVoiceStyleField();
+        return true;
+    }
+
+    (voiceStyleField.value || "").split(",").forEach((tag) => addVoiceStyleTag(tag, true));
+    renderVoiceStyleTags();
+    syncVoiceStyleField();
+    if (voiceStyleTags.some((tag) => !isValidVoiceStyleTag(tag))) {
+        setVoiceStyleClientError("Remove or replace highlighted tags; each tag must contain one or two words.");
+    }
+
+    voiceStyleEntry.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== ",") return;
+        event.preventDefault();
+        addVoiceStyleTag(voiceStyleEntry.value);
+    });
+    voiceStyleEntry.addEventListener("input", () => {
+        setVoiceStyleClientError();
+        syncVoiceStyleValidity();
+    });
+    voiceStyleField.closest("form").addEventListener("submit", (event) => {
+        if (voiceStyleEntry.value.trim() && !addVoiceStyleTag(voiceStyleEntry.value)) {
+            event.preventDefault();
+            voiceStyleEntry.reportValidity();
+            return;
+        }
+        if (!voiceStyleTags.length) {
+            event.preventDefault();
+            setVoiceStyleClientError("Add at least one voice-style tag.");
+            voiceStyleEntry.reportValidity();
+        } else if (!voiceStyleEntry.checkValidity()) {
+            event.preventDefault();
+            setVoiceStyleClientError("Remove or replace highlighted tags; each tag must contain one or two words.");
+            voiceStyleEntry.reportValidity();
+        }
+    });
 
     function getValue(id) {
         const el = document.getElementById(id);
@@ -262,7 +497,8 @@
             subsection("Middle to Ending Transition", getValue("id_middle_to_ending_cues")) +
             subsection("Ending", getValue("id_ending")) +
             section("Closing", getValue("id_closing")) +
-            section("Voice Gender", getValue("id_voice_gender")) +
+            section("Introduction Voice", getValue("id_introduction_voice_id")) +
+            section("Roleplay Voice", getValue("id_roleplay_voice_id")) +
             section("Voice Style", getValue("id_voice_style"))
         ).trim();
     }
@@ -287,6 +523,87 @@
         }
     });
     renderPreview();
+
+    const voicePreviewData = JSON.parse(document.getElementById("voice-preview-data")?.textContent || "{}");
+    let activeVoicePreview = null;
+
+    function setVoicePreviewStatus(control, message = "", error = false) {
+        const status = control.querySelector(".voice-preview-status");
+        status.textContent = message;
+        status.classList.toggle("error", error);
+    }
+
+    function stopVoicePreview() {
+        if (!activeVoicePreview) return;
+        const {audio, control} = activeVoicePreview;
+        audio.pause();
+        audio.currentTime = 0;
+        control.querySelector(".voice-preview-button").textContent = "▶ Preview";
+        setVoicePreviewStatus(control);
+        activeVoicePreview = null;
+    }
+
+    function updateVoicePreviewControl(control) {
+        const select = document.getElementById(control.dataset.voicePreviewFor);
+        const button = control.querySelector(".voice-preview-button");
+        const name = control.querySelector(".voice-preview-name");
+        const option = select?.options[select.selectedIndex];
+        const voiceId = select?.value || "";
+        const previewUrl = voicePreviewData[voiceId] || "";
+        name.textContent = voiceId ? (option?.textContent || "Selected voice") : "Choose a voice to preview";
+        button.disabled = !previewUrl;
+        if (!voiceId) {
+            setVoicePreviewStatus(control);
+        } else if (!previewUrl) {
+            setVoicePreviewStatus(control, "Sample unavailable");
+        } else {
+            setVoicePreviewStatus(control);
+        }
+    }
+
+    document.querySelectorAll(".voice-preview-control").forEach((control) => {
+        const select = document.getElementById(control.dataset.voicePreviewFor);
+        const button = control.querySelector(".voice-preview-button");
+        updateVoicePreviewControl(control);
+        select?.addEventListener("change", () => {
+            stopVoicePreview();
+            updateVoicePreviewControl(control);
+        });
+        button.addEventListener("click", async () => {
+            const voiceId = select?.value || "";
+            const previewUrl = voicePreviewData[voiceId] || "";
+            if (!previewUrl) return;
+            if (activeVoicePreview?.voiceId === voiceId && activeVoicePreview.control === control) {
+                stopVoicePreview();
+                return;
+            }
+            stopVoicePreview();
+            button.disabled = true;
+            button.textContent = "Loading…";
+            setVoicePreviewStatus(control, "Loading sample…");
+            const audio = new Audio(previewUrl);
+            activeVoicePreview = {audio, control, voiceId};
+            audio.addEventListener("ended", stopVoicePreview, {once: true});
+            audio.addEventListener("error", () => {
+                if (activeVoicePreview?.audio === audio) activeVoicePreview = null;
+                button.textContent = "▶ Preview";
+                button.disabled = false;
+                setVoicePreviewStatus(control, "Preview could not be loaded.", true);
+            }, {once: true});
+            try {
+                await audio.play();
+                if (activeVoicePreview?.audio !== audio) return;
+                button.textContent = "■ Stop";
+                button.disabled = false;
+                setVoicePreviewStatus(control, "Playing sample");
+            } catch (error) {
+                if (activeVoicePreview?.audio === audio) activeVoicePreview = null;
+                button.textContent = "▶ Preview";
+                button.disabled = false;
+                setVoicePreviewStatus(control, "Preview could not be played.", true);
+            }
+        });
+    });
 
     document.querySelectorAll(".tab-btn").forEach((btn) => {
         btn.addEventListener("click", () => {

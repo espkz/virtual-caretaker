@@ -57,13 +57,13 @@ Normalization checks forward stages, role-drift markers, repeated questions, pro
 
 Provider failures release the claim without inserting an error as character dialogue. After failure or reload the page displays the saved learner text as read-only with **Retry response**, preserving its turn ID. Closing during generation prevents a late response from committing. PostgreSQL supplies production row locking; SQLite serves local single-user development and isolated tests, not concurrent-class verification.
 
-## Browser speech
+## Browser conversation modes
 
-Student and instructor templates share `vip/static/vip/chat.js`. Text forms work without JavaScript. Supported browsers use Speech Recognition for microphone input; the student reviews the recognized text before sending. Controls handle unavailable recognition, denied access, blocked storage, duplicate sends, and autoplay restrictions.
+New student sessions have a fixed `text` or `voice` interaction mode. Text forms use `vip/static/vip/chat.js`, work without JavaScript, and do not load the ElevenLabs client or expose microphone/TTS controls. A normal POST still reaches the same claimed-turn lifecycle above.
 
-The voice request authorizes ownership of the saved assistant message; introductions remain text-only. `SpeechStream` opens `audio.speech.with_streaming_response.create` and forwards MP3 chunks through Django `StreamingHttpResponse`. It closes the provider response and client on completion, failure, or disconnect. Upstream errors before headers become a generic 503; mid-stream failures terminate playback, and the browser offers text/retry. `X-Accel-Buffering: no` asks the proxy to avoid buffering. Audible latency also depends on browser buffering and the network.
+Voice sessions use `vip/static/vip/voice_chat.js` and the optional ElevenLabs SpeechEngine adapter documented in [SPEECH_ENGINE.md](SPEECH_ENGINE.md). The browser receives a short-lived token only after the learner chooses Voice. Final ElevenLabs transcripts enter the existing Django claim/generate/persist helpers; the adapter has no prompt, model call, or competing conversation history of its own.
 
-Expressive and neutral styles use the configured OpenAI TTS model. Replay reuses the audio element's source where possible; no cross-user or durable audio cache is implemented. Stop cancels the current stream. Text generation still completes before TTS starts, and normal message submission still reloads the transcript page.
+The simulation introduction is derived from the session's saved scenario snapshot. Django shows and downloads it as `SIMULATION`, but it is not an assistant `ChatMessage` and is excluded from `ConversationEngine`. In voice mode, `SpeechStream` forwards that introduction through a neutral narrator voice before the ElevenLabs role-character session begins listening. `StreamingHttpResponse` cleanup and no-buffer headers remain the same as the existing TTS path.
 
 ## Configuration and tests
 

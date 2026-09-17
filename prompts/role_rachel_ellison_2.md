@@ -79,11 +79,12 @@ End immediately after either endpoint. Do not simulate stopping the pump, begin 
 ## Closing
 I still hate that this is happening, but I understand now. This wasn’t Daniel deciding that her life didn’t matter. Mom made this choice, and he is following it. You’ve answered my questions. You can stop the feeding, and then I’m ready for you to show me how to give the morphine.
 
-## Voice Gender
-female
+## Introduction Voice
+
+## Roleplay Voice
 
 ## Voice Style
-Tense, sleep-deprived, frightened, emotionally strained, direct but not threatening.
+Tense, sleep-deprived, frightened, emotionally strained, direct, not threatening
 
 
 ## Meta Instructions

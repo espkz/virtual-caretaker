@@ -77,11 +77,12 @@ End immediately after either endpoint. Do not simulate tracheostomy suctioning o
 ## Closing
 Okay. I don’t like it, but I understand what you’re telling me. I think I’m ready now. Can you show me how to suction her trach and give the water through her tube?
 
-## Voice Gender
-female
+## Introduction Voice
+
+## Roleplay Voice
 
 ## Voice Style
-Tense, worried, emotionally tired, direct but not hostile, with natural pauses.
+Tense, worried, emotionally tired, direct, not hostile
 
 
 ## Meta Instructions

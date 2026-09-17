@@ -6,6 +6,8 @@ The Django application is responsible for authentication, role-prompt management
 
 **Start here for the handoff:** [DEPLOYMENT.md](DEPLOYMENT.md) explains Django, Windows setup, the instructor/student workflow, and deploying to the existing school server. [TESTING.md](TESTING.md) records the usability findings, fixes, verification, and remaining classroom checks.
 
+**Live voice practice:** [SPEECH_ENGINE.md](SPEECH_ENGINE.md) documents the ElevenLabs Speech Engine integration, its server-only environment variables, the separate authenticated adapter process, and the public WSS tunnel required for local testing.
+
 **Reversed roles:** Scenario 2 also has a [clinician demonstration mode](CLINICIAN_DEMO.md), with the AI playing the hospice nurse and the human playing Rachel. Import that separate draft with `python vipdjango/manage.py load_scenarios --clinician-demo`, then select **Scenario 2: AI hospice nurse (you play Rachel)** in instructor Test Chat. Margaret remains the noncommunicating patient.
 
 The two Rachel scenarios use **guided scenario practice**: natural family-member dialogue grounded in the full faculty scenarios, with concern tracking and up to **20 learner messages plus 20 Rachel replies** (the introductory screen does not count). Nurse questions receive direct answers; specific follow-ups replace canned clarification. Topic pacing reserves time for all three themes and a final readiness check. The application closes by exchange 20 and permits earlier success only after coverage, repair, and readiness checks. See [faculty feedback fixes and rollout](FACULTY_FEEDBACK_FIXES.md). Import the revised prompts with `python manage.py load_scenarios --faculty-feedback`, activate those drafts in the instructor dashboard, and start new sessions.
@@ -33,6 +35,9 @@ vipdjango/
     core_questions.py               Guided dialogue, concern tracking, and closing
     clinician_demo.py               AI clinician dialogue and readiness handling
     speech.py                       Streaming TTS with disconnect cleanup
+    speech_engine/                  ElevenLabs token, narrator, and adapter package
+      service.py                     Server-only token, voice, and narrator helpers
+      adapter.py                     Isolated ElevenLabs transcript-to-chat adapter
     conversation_graph.py           LangGraph lifecycle and request state
     conversation_scenario.py        Scenario Markdown parser and data model
     prompt_utils.py                 Heading and section parsing helpers
@@ -64,6 +69,8 @@ export DJANGO_CSRF_COOKIE_SECURE=false
 export DJANGO_SECURE_PROXY_SSL_HEADER=false
 ```
 
+To enable live ElevenLabs voice conversations, also configure `ELEVENLABS_API_KEY` and `ELEVENLABS_SPEECH_ENGINE_ID`, then follow [SPEECH_ENGINE.md](SPEECH_ENGINE.md). The browser gets only a short-lived voice token; it never receives those secrets.
+
 `DJANGO_SECRET_KEY` is required by Django. `OPENAI_API_KEY` is required for live conversation generation and TTS. The default database is SQLite at `vipdjango/db.sqlite3`; set `SQLITE_PATH` to override it. PostgreSQL is available only when `DJANGO_DB_ENGINE=postgres`, with `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, and optional `POSTGRES_PORT` configured.
 
 Other optional Django settings include `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `DJANGO_DEBUG`, and the `DJANGO_SECURE_*` flags in `vipdjango/vipson_manager/settings.py`. For a local HTTP `runserver`, the four security flags shown above avoid HTTPS-only redirects and cookies intended for a TLS deployment.
@@ -76,7 +83,8 @@ python vipdjango/manage.py load_scenarios
 python vipdjango/manage.py createsuperuser
 ```
 
-The ignored `env.txt` convention is equivalent to:
+For local development, Django also loads the ignored repository-root `env.txt`.
+If you need those values in another shell process, source it explicitly:
 
 ```bash
 set -a
