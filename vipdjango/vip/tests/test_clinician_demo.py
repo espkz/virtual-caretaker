@@ -19,17 +19,7 @@ from .test_practice import message
 
 
 def nurse_text():
-    content = (Path(settings.BASE_DIR).parent / "prompts" / "role_hospice_nurse_2.md").read_text(encoding="utf-8")
-    return content.replace(
-        "## Conversation Stages\n",
-        "## Conversation Stages\n### Opening Line\nWhat feels most important for us to talk through before we begin?\n\n",
-    ).replace(
-        "## Introduction Voice\n\n",
-        "## Introduction Voice\nvoice_intro_test\n\n",
-    ).replace(
-        "## Roleplay Voice\n\n",
-        "## Roleplay Voice\nvoice_roleplay_test\n\n",
-    )
+    return (Path(settings.BASE_DIR).parent / "prompts" / "role_hospice_nurse_2.md").read_text(encoding="utf-8")
 
 
 def reply(text="The PEG stays in place for prescribed comfort medications.", topics=(), intent="continue", readiness=False, check="grounded", kind="answer"):

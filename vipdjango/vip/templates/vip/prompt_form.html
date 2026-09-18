@@ -187,14 +187,14 @@
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.simulation_mode.id_for_label }}">Simulation Mode <span class="required-mark">*</span></label>
+                    <label for="{{ form.simulation_mode.id_for_label }}">Simulation Mode</label>
                     {{ form.simulation_mode }}
                     <p class="preview-note">{{ form.simulation_mode.help_text }}</p>
                     {% if form.simulation_mode.errors %}<div class="errors">{{ form.simulation_mode.errors }}</div>{% endif %}
                 </div>
 
                 <div class="field">
-                    <label for="{{ form.background_context.id_for_label }}">Background and Context <span class="required-mark">*</span></label>
+                    <label for="{{ form.background_context.id_for_label }}">Background and Context</label>
                     {{ form.background_context }}
                     {% if form.background_context.help_text %}
                     <p class="preview-note">{{ form.background_context.help_text }}</p>
@@ -246,7 +246,6 @@
                     <label for="{{ form.middle.id_for_label }}">Middle <span class="required-mark">*</span></label>
                     {{ form.middle }}
                     <p class="preview-note">{{ form.middle.help_text }}</p>
-                    {% if form.middle.errors %}<div class="errors">{{ form.middle.errors }}</div>{% endif %}
                 </div>
 
                 <div class="field">

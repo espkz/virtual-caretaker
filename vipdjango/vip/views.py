@@ -2,7 +2,6 @@ import os
 import re
 import io
 import csv
-import json
 import logging
 import uuid
 from datetime import timedelta
@@ -10,8 +9,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from django.conf import settings
-from django.core.exceptions import ValidationError
-from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse, StreamingHttpResponse
+from django.http import HttpResponse, HttpResponseBadRequest, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -37,19 +35,9 @@ from .models import ChatMessage, ChatSession, RolePrompt, VoiceConversation
 from .conversation_graph import MAX_TURNS
 from .conversation_engine import (
     ConversationEngine,
-    clean_dialogue_for_display,
     split_dialogue_and_voice,
 )
 from .conversation_scenario import parse_scenario_prompt
-from .speech_engine.service import (
-    ElevenLabsSpeechStream,
-    SpeechEngineConfigurationError,
-    api_key as elevenlabs_api_key,
-    is_speech_engine_configured,
-    issue_webrtc_token,
-    list_elevenlabs_voice_options,
-    speech_engine_max_duration_seconds,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -1142,8 +1130,7 @@ def _rendered_chat_messages(session, user_label):
         display_content = message.content
         embedded_emotion = ""
         if message.sender == ChatMessage.Sender.ASSISTANT:
-            _legacy_dialogue, embedded_emotion = split_dialogue_and_voice(message.content)
-            display_content = clean_dialogue_for_display(message.content)
+            display_content, embedded_emotion = split_dialogue_and_voice(message.content)
         rendered.append(
             {
                 "id": message.id,
@@ -1168,17 +1155,6 @@ def _chat_dashboard_context(
 ):
     latest = current_session.messages.order_by("-id").first() if current_session else None
     pending = latest if latest and latest.sender == ChatMessage.Sender.STUDENT else None
-    voice_call = (
-        current_session.voice_conversations.order_by("-created_at").first()
-        if current_session and current_session.interaction_mode == ChatSession.InteractionMode.VOICE
-        else None
-    )
-    presentation = _scenario_presentation(session=current_session, prompt=selected_prompt)
-    scenario = parse_scenario_prompt(
-        (current_session.scenario_content if current_session else "")
-        or (selected_prompt.content if selected_prompt else "")
-    )
-    voice_configured = bool(scenario.introduction_voice_id and scenario.roleplay_voice_id)
     return {
         "active_prompts": active_prompts,
         "selected_prompt": selected_prompt,
@@ -1189,19 +1165,6 @@ def _chat_dashboard_context(
         "error_message": error_message,
         "force_new": force_new,
         "pending_message": pending,
-        "simulation_introduction": _simulation_introduction(session=current_session, prompt=selected_prompt),
-        "character_label": presentation["character_label"],
-        "scenario_character": presentation["character_summary"],
-        "scenario_learner": presentation["learner_summary"],
-        "scenario_briefing_context": presentation["briefing_context"],
-        "show_mode_selection": bool(selected_prompt and current_session is None),
-        "is_text_session": bool(current_session and current_session.interaction_mode == ChatSession.InteractionMode.TEXT),
-        "is_voice_session": bool(current_session and current_session.interaction_mode == ChatSession.InteractionMode.VOICE),
-        # This is deliberately only a capability flag. The page never receives
-        # the API key, Speech Engine ID, or a reusable provider credential.
-        "speech_engine_enabled": is_speech_engine_configured(),
-        "voice_enabled": is_speech_engine_configured() and voice_configured,
-        "voice_configuration_ready": voice_configured,
     }
 
 
@@ -1242,23 +1205,11 @@ def _selected_chat_state(request, *, restore_latest_session=True):
             ChatSession.objects.filter(student=request.user).select_related("role_prompt"),
             pk=session_id,
         )
-        if (
-            selected_prompt_id
-            and str(current_session.role_prompt_id) == str(selected_prompt_id)
-            and selected_prompt is None
-        ):
-            # An incomplete/deactivated prompt may still label a historical
-            # transcript; it cannot be used to start another conversation.
-            selected_prompt = current_session.role_prompt
-        elif selected_prompt_id and current_session.role_prompt_id != getattr(selected_prompt, "id", None):
-            current_session = (
-                sessions.filter(role_prompt=selected_prompt).first()
-                if restore_latest_session
-                else None
-            )
+        if selected_prompt_id and current_session.role_prompt_id != getattr(selected_prompt, "id", None):
+            current_session = sessions.filter(role_prompt=selected_prompt).first()
         elif current_session.role_prompt and not selected_prompt_id:
             selected_prompt = current_session.role_prompt
-    elif restore_latest_session and request.GET.get("new") != "1" and selected_prompt:
+    elif request.GET.get("new") != "1" and selected_prompt:
         current_session = sessions.filter(role_prompt=selected_prompt).first()
 
     force_new = request.POST.get("force_new") == "1" or request.GET.get("force_new") == "1"
@@ -1298,14 +1249,27 @@ def _usable_chat_session(
     return current_session, None
 
 
-def _create_chat_session(user, selected_prompt, interaction_mode=ChatSession.InteractionMode.TEXT):
-    """Create the durable chat; the narrator introduction is presentation-only."""
-    return ChatSession.objects.create(
-        student=user,
-        role_prompt=selected_prompt,
-        scenario_content=selected_prompt.content,
-        interaction_mode=interaction_mode,
-    )
+def _seed_introduction(session):
+    """Persist the fixed Introduction as text when a new chat starts."""
+    if not session or not session.role_prompt:
+        return
+    if session.messages.filter(sender=ChatMessage.Sender.ASSISTANT).exists():
+        return
+
+    scenario = parse_scenario_prompt(session.scenario_content or session.role_prompt.content)
+    introduction = (scenario.introduction or DEFAULT_INTRODUCTION).strip()
+    if introduction:
+        ChatMessage.objects.create(
+            session=session,
+            sender=ChatMessage.Sender.ASSISTANT,
+            content=introduction,
+        )
+
+
+def _create_chat_session(user, selected_prompt):
+    session = ChatSession.objects.create(student=user, role_prompt=selected_prompt, scenario_content=selected_prompt.content)
+    _seed_introduction(session)
+    return session
 
 
 def _chat_dashboard(
@@ -1453,7 +1417,7 @@ def _chat_dashboard(
             try:
                 assistant_text, conversation_complete, debug_info = _generate_assistant_response(
                     current_session.scenario_content or selected_prompt.content,
-                    _conversation_messages(current_session),
+                    current_session.messages.order_by("created_at"),
                     current_session,
                 )
             except Exception:
@@ -1514,7 +1478,7 @@ def professor_test_chat(request):
         request,
         template_name="vip/professor_test_chat.html",
         view_name="vip:professor_test_chat",
-        user_label="YOU",
+        user_label="Professor",
         no_prompt_message="No scenario is available. Create or upload a scenario first.",
         allow_delete_session=True,
         choose_mode=True,
@@ -1945,6 +1909,8 @@ def student_download_session(request, session_id):
         speaker = "YOU" if message.sender == ChatMessage.Sender.STUDENT else _scenario_presentation(session=session)["character_label"].upper()
         content = message.content
         lines.append(f"[{message.created_at}] {speaker}: {content}")
+        if voice_metadata:
+            lines.append(f"Voice metadata: {voice_metadata}")
         lines.append("")
 
     response = HttpResponse("\n".join(lines), content_type="text/plain")
@@ -1982,7 +1948,7 @@ def student_message_tts(request, message_id):
         stream = SpeechStream(
             api_key,
             model=os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
-            voice="coral",
+            voice="onyx" if re.search(r"\bmale voice\b", emotion.lower()) else "coral",
             input=dialogue or "No spoken dialogue.",
             instructions=emotion if use_emotion_voice else "Speak naturally and clearly.",
             response_format="mp3",

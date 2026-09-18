@@ -23,7 +23,7 @@ from vip.conversation_engine import ConversationEngine  # noqa: E402
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live", action="store_true", required=True)
-    parser.add_argument("--session", choices=["56", "57", "58", "59"], action="append")
+    parser.add_argument("--session", choices=["56", "57", "58", "59", "62", "63"], action="append")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     load_dotenv(ROOT / ".env")
@@ -32,9 +32,11 @@ def main():
         raise SystemExit("Configure OPENAI_API_KEY first.")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8") as output:
-        for session in args.session or ["56", "57", "58", "59"]:
-            number = 1 if session in {"56", "57"} else 2
+        for session in args.session or ["62", "63"]:
+            number = 1 if session in {"56", "57", "62"} else 2
             source = ROOT / "FW__AI-SP__AI_SP_is_ready_for_testing" / f"chat_session_{session} (1).txt"
+            if not source.exists():
+                source = source.with_name(f"chat_session_{session}.txt")
             nurse_lines = re.findall(r"^\[[^\]]+\] Student: (.*)$", source.read_text(), re.M)
             role = (ROOT / "prompts" / f"role_rachel_ellison_{number}.md").read_text()
             engine = ConversationEngine("", key)

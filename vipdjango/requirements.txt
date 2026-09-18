@@ -6,4 +6,3 @@ gunicorn>=23,<26; sys_platform != "win32"
 whitenoise>=6.9,<7
 psycopg[binary]>=3.2,<4
 python-dotenv>=1,<2
-elevenlabs>=2.66,<3

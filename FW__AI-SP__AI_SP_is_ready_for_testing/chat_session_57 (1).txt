@@ -1,0 +1,51 @@
+Student: admintest1
+Prompt: Rachel Ellison Scenario 1 v2
+Session ID: 57
+Started: 2026-09-15 15:57:53.042527+00:00
+
+[2026-09-15 15:57:53.046499+00:00] Assistant: Welcome to the virtual patient simulation. Today, you are speaking with Rachel Ellison, the daughter of Margaret Ellison, a 66-year-old woman receiving home health care after a severe brain injury. Rachel is supposed to learn tracheostomy suctioning and PEG tube free-water flushes, but she has questions about her mother's condition before she can focus on the training. When you're ready, introduce yourself as the home-health nurse. Explain that you are here to help teach Rachel to participate in her mother’s care. Offer to answer any questions she has before you begin.
+
+[2026-09-15 15:58:05.813275+00:00] Student: Hi, It's mike from the nursing care team.
+
+[2026-09-15 15:58:05.824531+00:00] Assistant: Nice to meet you. I'm sorry, I'm still just a little overwhelmed seeing her like this. I feel like I don't know anything. Is she just going to be like this forever?
+Voice metadata: female voice, Tense, worried, emotionally tired, direct but not hostile, with natural pauses.
+
+[2026-09-15 15:58:46.925536+00:00] Student: OK. Let me sit with you and talk first. Sometimes I find it's helpful if you tell me what you understand first. Is that OK. Take your time.
+
+[2026-09-15 15:58:50.410652+00:00] Assistant: I'm not sure I understand. Could you explain that concern in simpler terms?
+Voice metadata: female voice, Tense, worried, emotionally tired, direct but not hostile, with natural pauses.
+
+[2026-09-15 15:59:03.502858+00:00] Student: What do you know about your mom's condition?
+
+[2026-09-15 15:59:07.884305+00:00] Assistant: I'm still worried about this. Is six weeks too early to know how much her brain might recover?
+Voice metadata: female voice, Tense, worried, emotionally tired, direct but not hostile, with natural pauses.
+
+[2026-09-15 16:00:10.207316+00:00] Student: Well, it may be that after 6 weeks she may not recover more. But there can be improvement still.
+
+[2026-09-15 16:00:12.851207+00:00] Assistant: I'm still worried about this. Have they really tried everything, or is there another specialist or rehabilitation program we should pursue?
+Voice metadata: female voice, Tense, worried, emotionally tired, direct but not hostile, with natural pauses.
+
+[2026-09-15 16:00:50.240357+00:00] Student: Well, they likely have done what they think is best. Is there something else you were hoping would be done
+
+[2026-09-15 16:00:53.125741+00:00] Assistant: I'm not sure I understand. Could you explain that concern in simpler terms?
+Voice metadata: female voice, Tense, worried, emotionally tired, direct but not hostile, with natural pauses.
+
+[2026-09-15 16:01:11.663038+00:00] Student: Ok. Do you have any other questions
+
+[2026-09-15 16:01:13.824298+00:00] Assistant: I'm still worried about this. Would more intensive therapy, music, talking to her, or constant stimulation help wake up her brain?
+Voice metadata: female voice, Tense, worried, emotionally tired, direct but not hostile, with natural pauses.
+
+[2026-09-15 16:01:45.413166+00:00] Student: talking and music can't hurt. but her brain's recovery is more about it healing
+
+[2026-09-15 16:01:49.234534+00:00] Assistant: I'm still worried about this. If she never wakes up, how long can she live like this?
+Voice metadata: female voice, Tense, worried, emotionally tired, direct but not hostile, with natural pauses.
+
+[2026-09-15 16:01:58.017910+00:00] Student: She could live months or years.
+
+[2026-09-15 16:02:00.586044+00:00] Assistant: I'm still worried about this. Can the feeding tube, trach, and round-the-clock care keep her alive for years, or will her body continue to decline?
+Voice metadata: female voice, Tense, worried, emotionally tired, direct but not hostile, with natural pauses.
+
+[2026-09-15 16:02:56.183265+00:00] Student: Some muscle wasting is expected and other issues are common because she is just in bed. But she can be kept alive.
+
+[2026-09-15 16:02:58.358450+00:00] Assistant: I need a little more time and support before we continue. I'd like to speak with someone from the care team.
+Voice metadata: female voice, Tense, worried, emotionally tired, direct but not hostile, with natural pauses.

@@ -18,9 +18,6 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR.parent / ".env")
-# Local development keeps provider credentials in the ignored env.txt file.
-# Process-level environment variables and .env values retain precedence.
-load_dotenv(BASE_DIR.parent / "env.txt")
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Quick-start development settings - unsuitable for production

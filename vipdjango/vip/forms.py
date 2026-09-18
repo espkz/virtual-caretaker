@@ -13,7 +13,7 @@ class RolePromptForm(forms.Form):
     is_active = forms.BooleanField(required=False)
     simulation_mode = forms.ChoiceField(
         choices=[("roleplay", "Patient or family roleplay"), ("clinician_demo", "Clinician demonstration")],
-        initial="roleplay",
+        initial="roleplay", required=False,
         help_text="Clinician demonstration answers the human's concerns. Also set the Role, User Role, guidance, and closing for that clinician; this choice does not rewrite them.",
     )
 
@@ -68,6 +68,10 @@ class RolePromptForm(forms.Form):
     )
     middle = forms.CharField(
         widget=forms.Textarea(attrs={"rows": 8}),
+        help_text="For guided scenario practice, use a top-level '- Theme' bullet for each theme and indented numbered questions beneath it. Use the full question set and conditional reactions. The app tracks concerns, answers learner questions, and allows up to 25 exchanges with time reserved for each theme.",
+    )
+    middle = forms.CharField(
+        required=False, widget=forms.Textarea(attrs={"rows": 8}),
         help_text="For guided scenario practice, use a top-level '- Theme' bullet for each theme and indented numbered questions beneath it. Use the full question set and conditional reactions. The app tracks concerns, answers learner questions, and allows up to 25 exchanges with time reserved for each theme.",
     )
     middle_to_ending_cues = forms.CharField(

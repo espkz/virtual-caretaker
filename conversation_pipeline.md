@@ -9,7 +9,7 @@ Browser login / selected scenario
     -> learner POST with retry ID
     -> locked session claim + saved learner message
     -> ConversationEngine.respond
-         -> explicit stop / 20-turn boundary
+         -> explicit stop / 25-turn boundary
          -> clinician demonstration for an explicit clinician_demo mode
          -> fixed Opening Line for legacy family/patient scenarios
          -> guided scenario practice for Middle themes with numbered examples
@@ -28,13 +28,14 @@ Editing a RolePrompt affects new sessions. Migration 0011 snapshots existing ses
 
 ## Guided scenario practice
 
-`core_questions.py` owns the turn budget, concern ledger, and completion. A single structured model request produces both Rachel’s dialogue and its assessment. The request includes all parsed scenario sections (including hidden conditional responses), the transcript, known/asked/answered concerns, and the remaining budget.
+`core_questions.py` owns the turn budget, concern ledger, and completion. A single structured model request produces Rachel’s answer/reaction, question selection, and assessment. Fresh questions are rendered from the selected faculty wording, so spoken concerns match their tracked IDs. Directed answers and the one permitted unclear/unsafe follow-up remain generated. The request includes all parsed scenario sections (including hidden conditional responses), the transcript, known/asked/answered concerns, and the remaining budget.
 
 - Dialogue answers the nurse first; invitations to explain understanding or feelings have their own assessment category.
+- A shuffled question order is saved per session. One fresh concern per eligible theme is offered, favoring themes with fewer questions; earlier themes remain eligible for unasked concerns. New sessions draw new orders, while reloads preserve the existing order.
 - Approximately 10–12 concerns can be explored across the full question banks. Questions already answered ahead of time are omitted; a later repair can clear an earlier unresolved concern.
-- The scheduler reserves roughly six exchanges per theme and the final two for understanding/readiness. After two concerns have been raised, adjacent-theme choices let Rachel follow the nurse into a new topic earlier. After two follow-ups on a pending concern, it instructs the character to advance while recording unresolved issues. It does not require asking every example question.
+- The scheduler reserves roughly seven exchanges per theme and the final two for understanding/readiness. After two concerns have been raised, adjacent-theme choices let Rachel follow the nurse into a new topic earlier. Only unclear or unsafe answers allow one follow-up on a pending concern. Reasonable explanations advance to a fresh question; nurse-directed questions get direct answers. It does not require asking every example question.
 - Known IDs, allowed next concerns, role/dose checks, and duplicate-output checks constrain generated output. Rejected dialogue gets one rewrite with a 15-second timeout and no provider retries; further invalid output uses the existing user retry workflow without committing dialogue or progress. At the final turn, invalid dialogue produces a deterministic pause instead. These checks are heuristics, not a guarantee against hallucination.
-- Successful completion requires coverage of all themes, no recorded unresolved concern, and a model-reported readiness check quoted from the latest nurse message. The scenario supplies the final successful line. At turn 20 Rachel answers briefly, asks no new question, and pauses if readiness has not been established.
+- Successful completion requires coverage of all themes, no recorded unresolved concern, and a model-reported readiness check quoted from the latest nurse message. The scenario supplies the final successful line. At turn 25 Rachel answers briefly, asks no new question, and pauses if readiness has not been established.
 - `core_question_state` retains legacy fields and adds addressed IDs, per-concern follow-up counts, active theme, and current turn. No schema migration is required. Old state is upgraded in memory; fresh sessions are recommended for the revised scenarios.
 
 The old six-question completion rule and fixed clarification/reaction vocabulary have been removed. Generated conversation must still be reviewed by faculty for scenario fidelity and educational quality.
@@ -49,7 +50,7 @@ Prompts without question examples retain the existing initialize -> generate -> 
 
 Normalization checks forward stages, role-drift markers, repeated questions, progress IDs, and voice style. Candidate endings may use a separate semantic verifier. These are heuristic safeguards around generated text. The prompt table labels these **Open-ended legacy scenario**. Use the revised guided scenarios for the classroom exercise.
 
-`TARGET_TURNS` and `MAX_TURNS` are 20. Guided family scenarios answer the 20th learner message before the application ends the session. Legacy and clinician modes retain their deterministic boundary pause. Standalone stop commands and the Close Conversation button still end immediately; “stop the feeding pump” is scenario dialogue, not a session-stop command.
+`TARGET_TURNS` and `MAX_TURNS` are 25. Guided family scenarios answer the 25th learner message before the application ends the session. Legacy and clinician modes retain their deterministic boundary pause. Standalone stop commands and the Close Conversation button still end immediately; “stop the feeding pump” is scenario dialogue, not a session-stop command.
 
 ## Persistence and recovery
 
@@ -57,13 +58,13 @@ Normalization checks forward stages, role-drift markers, repeated questions, pro
 
 Provider failures release the claim without inserting an error as character dialogue. After failure or reload the page displays the saved learner text as read-only with **Retry response**, preserving its turn ID. Closing during generation prevents a late response from committing. PostgreSQL supplies production row locking; SQLite serves local single-user development and isolated tests, not concurrent-class verification.
 
-## Browser conversation modes
+## Browser speech
 
-New student sessions have a fixed `text` or `voice` interaction mode. Text forms use `vip/static/vip/chat.js`, work without JavaScript, and do not load the ElevenLabs client or expose microphone/TTS controls. A normal POST still reaches the same claimed-turn lifecycle above.
+Student and instructor templates share `vip/static/vip/chat.js`. Text forms work without JavaScript. Supported browsers use Speech Recognition for microphone input; the student reviews the recognized text before sending. Controls handle unavailable recognition, denied access, blocked storage, duplicate sends, and autoplay restrictions.
 
-Voice sessions use `vip/static/vip/voice_chat.js` and the optional ElevenLabs SpeechEngine adapter documented in [SPEECH_ENGINE.md](SPEECH_ENGINE.md). The browser receives a short-lived token only after the learner chooses Voice. Final ElevenLabs transcripts enter the existing Django claim/generate/persist helpers; the adapter has no prompt, model call, or competing conversation history of its own.
+The voice request authorizes ownership of the saved assistant message; introductions remain text-only. `SpeechStream` opens `audio.speech.with_streaming_response.create` and forwards MP3 chunks through Django `StreamingHttpResponse`. It closes the provider response and client on completion, failure, or disconnect. Upstream errors before headers become a generic 503; mid-stream failures terminate playback, and the browser offers text/retry. `X-Accel-Buffering: no` asks the proxy to avoid buffering. Audible latency also depends on browser buffering and the network.
 
-The simulation introduction is derived from the session's saved scenario snapshot. Django shows and downloads it as `SIMULATION`, but it is not an assistant `ChatMessage` and is excluded from `ConversationEngine`. In voice mode, `SpeechStream` forwards that introduction through a neutral narrator voice before the ElevenLabs role-character session begins listening. `StreamingHttpResponse` cleanup and no-buffer headers remain the same as the existing TTS path.
+Expressive and neutral styles use the configured OpenAI TTS model. Replay reuses the audio element's source where possible; no cross-user or durable audio cache is implemented. Stop cancels the current stream. Text generation still completes before TTS starts, and normal message submission still reloads the transcript page.
 
 ## Configuration and tests
 

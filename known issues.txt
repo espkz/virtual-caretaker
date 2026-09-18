@@ -1,0 +1,18 @@
+After she started under my advisor's supervision last summer, Ellie has done a great job advancing the platform for AI-based Standardized Patients (SP) with specific scenarios. Instructors can create an SP for specific clinical scenarios, test it, and release it to students. Students will access it with their account and interact with an SP to learn how to communicate with them. 
+
+We recently created two scenarios to implement a larger class where students learn how to communicate with family members of parents in the end-of-life stage. (You will see two scenarios active) 
+
+I attached two original scenarios that instructors developed (one is a shorter version, and the other two are longer versions); the longer version was used for Ellie to create the SPs in the platform (her prompts are also attached). Although the platform allows instructors to complete the form to create SPs, Ellie did this time to ensure prompt quality. 
+
+ - One general issue we encountered is that the conversation should end at some point (maybe around 20 turns or less, 5 minutes per session), but it is hard to close the conversation smoothly. 
+ - The second issue is that the AI did not follow the guidelines — instead, the AI sticks with a particular context and situation and keeps asking deeper or redundant questions suck around a certain point. (There is a series of questions the AI (playing a family member role) should ask, so students can learn how to respond to such questions) 
+ - After a few iterations of improvement, we encountered hallucination, which wasn’t occurring earlier. 
+
+Here is Ellie’s account of the problem: 
+ - The system hallucinates to act like the user role despite the guardrails
+ - It seems to fail to transition to the next conversational state(s), and continues to stay in the current conversation state e.g. when the user answers a question, the system asks a follow-up question that is basically that same question and fails to transition out of that conversation state
+ - Speech communication latency has been another issue. Ellie is considering switching from the current GPT-4o mini TTS to ElevenLabs to resolve this issue. 
+
+After we encountered issues, we wanted AI to ask only core questions (attached as Core Questions). For example, under each theme, the AI picks a couple of questions from the list and asks them; once students respond reasonably, the AI moves on to a couple of questions from the next theme, and so on. With three themes, it asks about 6+ questions total, so the session ends in less than 5 minutes. However, it still isn't behaving the way we want. 
+
+From the school's perspective, our current implementation is high-stakes. So many people are involved in arranging the simulation according to our research protocols. Additional instructors assess students' performance during their human SP session to see whether AI SP practice improves their competency and anxiety control. 
