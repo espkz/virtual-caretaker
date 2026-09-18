@@ -75,8 +75,6 @@
                 <h2 id="new-conversation-heading">{{ selected_prompt.title }}</h2>
                 <div class="scenario-briefing">
                     <p><strong>Conversation partner:</strong> {{ scenario_character }}</p>
-                    <p><strong>Your role:</strong> {{ scenario_learner }}</p>
-                    {% if scenario_briefing_context %}<p>{{ scenario_briefing_context }}</p>{% endif %}
                 </div>
                 <h3>How would you like to practice?</h3>
                 {% if error_message %}<div class="error-text">{{ error_message }}</div>{% endif %}

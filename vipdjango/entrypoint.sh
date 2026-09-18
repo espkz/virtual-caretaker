@@ -13,7 +13,9 @@ TIMEOUT="${GUNICORN_TIMEOUT:-120}"
 # Both services are required.  Keep them as siblings so a Speech Engine
 # startup/runtime failure is visible in the container logs and also takes the
 # web process down instead of silently leaving a partly working deployment.
-python manage.py run_speech_engine --port "${SPEECH_ENGINE_PORT:-8081}" &
+# Keep Speech Engine protocol diagnostics on the container's unbuffered stdout
+# so they are available through `podman logs`.
+python manage.py run_speech_engine --port "${SPEECH_ENGINE_PORT:-8081}" --debug &
 speech_engine_pid=$!
 
 gunicorn vipson_manager.wsgi:application --bind "0.0.0.0:${PORT}" --workers "${WORKERS}" --timeout "${TIMEOUT}" &
