@@ -13,6 +13,7 @@ from django.contrib.auth.models import Group
 from django.test import SimpleTestCase, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
+from elevenlabs.core.api_error import ApiError
 
 from vip import views
 from vip.conversation_engine import ConversationEngine
@@ -792,6 +793,68 @@ class SpeechEngineVoiceResourceTests(TestCase):
             client.conversational_ai.conversations.get_webrtc_token.call_args.kwargs["agent_id"],
             "seng_selected_voice",
         )
+
+    @patch.dict(
+        "os.environ",
+        {"ELEVENLABS_API_KEY": "server-secret", "ELEVENLABS_SPEECH_ENGINE_ID": "seng_base"},
+        clear=False,
+    )
+    @patch("elevenlabs.ElevenLabs")
+    def test_missing_provider_resource_recreates_a_stale_voice_mapping(self, factory):
+        stale_mapping = SpeechEngineVoiceResource.objects.create(
+            voice_id="voice_character",
+            speech_engine_id="seng_deleted_voice",
+        )
+        client = factory.return_value
+        client.speech_engine.get.side_effect = [
+            ApiError(status_code=404, headers={}, body={"detail": "Agent not found"}),
+            SimpleNamespace(config=SimpleNamespace(speech_engine={"ws_url": "wss://voice.example/ws"})),
+        ]
+        client.speech_engine.create.return_value = SimpleNamespace(engine_id="seng_recreated_voice")
+        client.conversational_ai.conversations.get_webrtc_token.return_value = SimpleNamespace(
+            token="short-lived-token",
+            conversation_id="conv_recreated_voice",
+        )
+
+        token = issue_webrtc_token("learner", voice_id="voice_character")
+
+        self.assertEqual(token.token, "short-lived-token")
+        self.assertFalse(SpeechEngineVoiceResource.objects.filter(pk=stale_mapping.pk).exists())
+        self.assertEqual(
+            SpeechEngineVoiceResource.objects.get(voice_id="voice_character").speech_engine_id,
+            "seng_recreated_voice",
+        )
+        self.assertEqual(client.speech_engine.get.call_count, 2)
+        self.assertEqual(client.speech_engine.create.call_count, 1)
+
+    @patch.dict(
+        "os.environ",
+        {"ELEVENLABS_API_KEY": "server-secret", "ELEVENLABS_SPEECH_ENGINE_ID": "seng_base"},
+        clear=False,
+    )
+    @patch("elevenlabs.ElevenLabs")
+    def test_provider_mapping_error_other_than_not_found_is_not_hidden(self, factory):
+        SpeechEngineVoiceResource.objects.create(
+            voice_id="voice_character",
+            speech_engine_id="seng_unavailable_voice",
+        )
+        client = factory.return_value
+        client.speech_engine.get.side_effect = ApiError(
+            status_code=503,
+            headers={},
+            body={"detail": "Provider unavailable"},
+        )
+
+        with self.assertRaises(ApiError):
+            issue_webrtc_token("learner", voice_id="voice_character")
+
+        self.assertTrue(
+            SpeechEngineVoiceResource.objects.filter(
+                voice_id="voice_character",
+                speech_engine_id="seng_unavailable_voice",
+            ).exists()
+        )
+        client.speech_engine.create.assert_not_called()
 
 
 class SpeechEngineAdapterTests(TransactionTestCase):

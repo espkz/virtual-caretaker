@@ -21,6 +21,24 @@ class RolePrompt(models.Model):
         return self.title
 
     @property
+    def missing_required_fields(self):
+        from .prompt_utils import missing_required_prompt_fields
+        return missing_required_prompt_fields(self.title, self.content)
+
+    @property
+    def is_complete(self):
+        return not self.missing_required_fields
+
+    def save(self, *args, **kwargs):
+        """Incomplete prompts are always drafts and cannot be activated."""
+        if self.is_active and not self.is_complete:
+            self.is_active = False
+            update_fields = kwargs.get("update_fields")
+            if update_fields is not None:
+                kwargs["update_fields"] = set(update_fields) | {"is_active"}
+        return super().save(*args, **kwargs)
+
+    @property
     def uses_core_questions(self):
         from .conversation_scenario import parse_scenario_prompt
         from .core_questions import enabled

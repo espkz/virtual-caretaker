@@ -199,7 +199,7 @@ def _history(messages, scenario=None):
             continue
         content = (message.content or "").strip()
         if sender == "assistant":
-            content, _ = split_dialogue_and_voice(content)
+            content = clean_dialogue_for_display(content)
             if _looks_like_role_drift(content):
                 content = (
                     "[Previous simulated-character turn omitted because it violated role ownership. "
@@ -454,7 +454,9 @@ def _initial_topic_progress(scenario, state):
         for message in history:
             if message.get("role") != "assistant":
                 continue
-            dialogue, _ = split_dialogue_and_voice(message.get("content", ""))
+            # Audio tags are expressive delivery rather than topical content;
+            # do not let an old tagged transcript influence topic recovery.
+            dialogue = clean_dialogue_for_display(message.get("content", ""))
             dialogue = _without_history_label(dialogue)
             if introduction and dialogue.strip() == introduction:
                 continue
@@ -788,7 +790,7 @@ class ConversationEngine:
             f"SCENARIO META GUIDANCE (character-side reference only):\n{scenario['meta']}\n"
             f"OBJECTIVE PROGRESS (lightweight guidance):\n{_objective_progress_context(scenario, state)}\n"
             f"TOPIC PROGRESS (application-controlled):\n{_topic_progress_context(scenario, state)}\n"
-            f"Voice: {scenario['voice_gender']} voice; baseline style: {scenario['voice_style']}\n"
+            f"Baseline vocal delivery: {scenario['voice_style']}\n"
             "CONVERSATION MEMORY:\n"
             f"{_conversation_memory(state.get('history', []))}\n"
             "STAGE CONTRACT: Scenario cues are semantic signals, not a checklist or a queue of required questions. "
@@ -813,11 +815,16 @@ class ConversationEngine:
             "If a topic remains, ask one real question from a remaining topic now. Do not say only 'that's a good question' "
             "or describe that you want to explore options. If no meaningful topic remains, say naturally that you have no "
             "other questions and, when appropriate, indicate readiness to conclude.\n"
-            "OUTPUT CONTRACT: Return JSON only. `dialogue` contains only the character's spoken words; never put "
-            "voice, emotion, stage notes, brackets, narration, or metadata there. `voice` is concise TTS style "
-            "metadata without brackets or the word 'voice'. Questions are optional except when the Learner explicitly "
+            "OUTPUT CONTRACT: Return JSON only. `dialogue` contains the character's spoken dialogue and MUST contain "
+            "at least one inline ElevenLabs v3 audio tag. Begin every response with a one or two word lowercase square-bracket "
+            "emotional state or dialogue descriptor, for example `[tense]`, `[happily]`, `[worried]`, `[hysterically]`, or `[whispering]`. "
+            "Add further appropriate emotion or action tags, such as `[pause]`, only after a "
+            "natural phrase or sentence boundary when delivery changes. Do not use `[natural]` as a filler and do not "
+            "tag every sentence. "
+            "Never put role, state, stage, system, tool, or other control instructions in a tag. Do not write narration "
+            "or stage directions outside a valid audio tag. Questions are optional except when the Learner explicitly "
             "asks whether you have other questions and a topic remains. Acknowledge the Learner's answer, then move to "
-            "a related concern or a new stage when appropriate. Return fields dialogue, voice, stage, "
+            "a related concern or a new stage when appropriate. Return fields dialogue, stage, "
             "stage_transition_ready, complete, stop_requested, active_objective, covered_objectives, "
             "unresolved_objectives, ending_ready, active_topic, covered_topics, unresolved_topics, "
             "For objective and topic fields, return the complete current progress "
@@ -852,7 +859,7 @@ class ConversationEngine:
             )
         request_kwargs = {
             "model": self.model,
-            "text": {"format": {"type": "json_schema", "name": "character_turn", "schema": {"type": "object", "properties": {"dialogue": {"type": "string"}, "voice": {"type": "string"}, "stage": {"type": "string", "enum": ["beginning", "middle", "ending"]}, "stage_transition_ready": {"type": "boolean"}, "complete": {"type": "boolean"}, "stop_requested": {"type": "boolean"}, "active_objective": {"type": "string"}, "covered_objectives": {"type": "array", "items": {"type": "string"}}, "unresolved_objectives": {"type": "array", "items": {"type": "string"}}, "ending_ready": {"type": "boolean"}, "active_topic": {"type": "string"}, "covered_topics": {"type": "array", "items": {"type": "string"}}, "unresolved_topics": {"type": "array", "items": {"type": "string"}}}, "required": ["dialogue", "voice", "stage", "stage_transition_ready", "complete", "stop_requested", "active_objective", "covered_objectives", "unresolved_objectives", "ending_ready", "active_topic", "covered_topics", "unresolved_topics"], "additionalProperties": False}, "strict": True}},
+            "text": {"format": {"type": "json_schema", "name": "character_turn", "schema": {"type": "object", "properties": {"dialogue": {"type": "string"}, "stage": {"type": "string", "enum": ["beginning", "middle", "ending"]}, "stage_transition_ready": {"type": "boolean"}, "complete": {"type": "boolean"}, "stop_requested": {"type": "boolean"}, "active_objective": {"type": "string"}, "covered_objectives": {"type": "array", "items": {"type": "string"}}, "unresolved_objectives": {"type": "array", "items": {"type": "string"}}, "ending_ready": {"type": "boolean"}, "active_topic": {"type": "string"}, "covered_topics": {"type": "array", "items": {"type": "string"}}, "unresolved_topics": {"type": "array", "items": {"type": "string"}}}, "required": ["dialogue", "stage", "stage_transition_ready", "complete", "stop_requested", "active_objective", "covered_objectives", "unresolved_objectives", "ending_ready", "active_topic", "covered_topics", "unresolved_topics"], "additionalProperties": False}, "strict": True}},
             "input": payload,
         }
 
@@ -1127,10 +1134,7 @@ class ConversationEngine:
                     ending_check["satisfied"] = False
                     ending_check["reason"] = "progress_not_ready"
 
-        dialogue, embedded_voice = split_dialogue_and_voice(raw_dialogue)
-        voice_value = result.get("voice", "") or embedded_voice
-        if embedded_voice and (not voice_value or voice_value.strip("[] ").lower() in {"male", "female", "voice"}):
-            voice_value = embedded_voice
+        dialogue = raw_dialogue
         if complete and parsed_scenario.closing and fallback_kind != "other_questions_no_remaining_topics":
             dialogue = parsed_scenario.closing
 
@@ -1138,7 +1142,7 @@ class ConversationEngine:
         reason = "semantic_ending_verified" if ending_check["satisfied"] else (
             "llm_turn_at_safety_cap" if at_safety_cap else "llm_turn"
         )
-        return dialogue, _voice_metadata(voice_value, parsed_scenario), proposed_stage, complete, False, {
+        return dialogue, "", proposed_stage, complete, False, {
             "reason": reason,
             "stage_transition_ready": transition_ready,
             "completion_requested": model_requested_completion,

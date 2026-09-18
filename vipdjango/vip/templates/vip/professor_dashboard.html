@@ -56,7 +56,9 @@
             <td>{{ prompt.updated_at }}</td>
             <td>
                 <div class="table-actions">
+                {% if prompt.is_complete %}
                 <a class="action-btn" href="{% url 'vip:professor_test_chat' %}?prompt={{ prompt.id }}">Test</a>
+                {% endif %}
                 <a class="action-btn" href="{% url 'vip:edit_prompt' prompt.id %}">Edit</a>
                 <a class="action-btn" href="{% url 'vip:professor_download_prompt_txt' prompt.id %}">Download .txt</a>
                 {% if prompt.is_active %}

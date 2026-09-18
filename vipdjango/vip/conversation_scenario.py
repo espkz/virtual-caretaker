@@ -51,6 +51,8 @@ class Scenario:
     background_context: str = ""
     topics: tuple[ScenarioTopic, ...] = ()
     simulation_mode: str = "roleplay"
+    introduction_voice_id: str = ""
+    roleplay_voice_id: str = ""
 
     def to_state(self):
         state = asdict(self)
@@ -97,7 +99,7 @@ def parse_scenario_prompt(role_text: str) -> Scenario:
     gender = (section(["voice gender", "voice"]) or "female").lower()
     if gender not in {"male", "female"}:
         gender = "female"
-    voice_style = section(["voice style", "voice instructions"]) or "speak naturally and clearly"
+    voice_style = normalize_voice_style(section(["voice style", "voice instructions"]))
     middle = section(["middle", "conversation progression: middle"])
     return Scenario(
         simulation_mode=section(["simulation mode"]).lower() or "roleplay",

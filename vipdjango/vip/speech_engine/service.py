@@ -146,6 +146,11 @@ def list_elevenlabs_voice_options():
         return []
 
 
+def _is_provider_not_found(error):
+    """Return whether an ElevenLabs API error means a resource is gone."""
+    return getattr(error, "status_code", None) == 404
+
+
 def _speech_engine_for_voice(client, voice_id):
     """Get/create a fixed-voice Speech Engine resource for one selected voice.
 
@@ -157,7 +162,20 @@ def _speech_engine_for_voice(client, voice_id):
 
     existing = SpeechEngineVoiceResource.objects.filter(voice_id=voice_id).first()
     if existing:
-        return existing.speech_engine_id
+        try:
+            # Validate the token before handing it to the token endpoint sona stale row does not permanently block the voice
+            client.speech_engine.get(existing.speech_engine_id)
+        except Exception as error:
+            if not _is_provider_not_found(error):
+                raise
+            logger.warning(
+                "Removing stale Speech Engine mapping voice_id=%s speech_engine_id=%s",
+                voice_id,
+                existing.speech_engine_id,
+            )
+            existing.delete()
+        else:
+            return existing.speech_engine_id
 
     # ElevenLabs fixes a Speech Engine resource's TTS voice. The configured
     # external ID supplies the authenticated upstream settings; one provider
