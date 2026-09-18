@@ -1,0 +1,78 @@
+{
+  "scenario": "role_rachel_ellison_1",
+  "scenario_file": "/Users/espaek/PycharmProjects/virtual-caretaker/prompts/role_rachel_ellison_1.md",
+  "saved_at": "2026-09-11T22:41:23.711561+00:00",
+  "completion_state": {
+    "complete": false,
+    "stage": "middle",
+    "turn_count": 5
+  },
+  "messages": [
+    {
+      "turn": 1,
+      "sender": "assistant",
+      "content": "Welcome to the virtual patient simulation. Today, you are speaking with Rachel Ellison, the daughter of Margaret Ellison, a 66-year-old woman receiving home health care after a severe brain injury. Rachel is supposed to learn tracheostomy suctioning and PEG tube free-water flushes, but she has questions about her mother's condition before she can focus on the training. When you're ready, introduce yourself as the home-health nurse. Explain that you are here to help teach Rachel to participate in her mother\u2019s care. Offer to answer any questions she has before you begin.",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 2,
+      "sender": "student",
+      "content": "Hi Rachel, this is sam from the hospice team",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 3,
+      "sender": "assistant",
+      "content": "Nice to meet you. I'm sorry, I'm still just a little overwhelmed seeing her like this. I feel like I don't know anything. Is she just going to be like this forever?",
+      "voice_metadata": "female voice, Tense, worried, emotionally tired, direct but not hostile, with natural pauses."
+    },
+    {
+      "turn": 4,
+      "sender": "student",
+      "content": "It's alright, I'm here with you. Let me sit down with you and answer any questions you have",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 5,
+      "sender": "assistant",
+      "content": "Thank you. I\u2019m trying to take this in, but I\u2019m scared to hope and scared not to. Can you tell me honestly what the chances are that she\u2019ll become aware again or be able to communicate with us?",
+      "voice_metadata": "female voice, Tense, worried, quiet"
+    },
+    {
+      "turn": 6,
+      "sender": "student",
+      "content": "Why don't you first tell me what you know? What have the doctors and your brother told you?",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 7,
+      "sender": "assistant",
+      "content": "They told me her brain was badly damaged when her heart stopped, and that waking up isn\u2019t the same as being aware. She opens her eyes, but she doesn\u2019t follow us or do anything on purpose, and they haven\u2019t given me a real answer about whether that will change. I need someone to tell me honestly what that means\u2014not just say there\u2019s a chance.",
+      "voice_metadata": "female voice, tense, worried, emotionally tired"
+    },
+    {
+      "turn": 8,
+      "sender": "student",
+      "content": "Well, you're right in that she had a severe brain injury. Unfortunately a full recovery isn't likely, but we can hope for small changes and improvements from day to day",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 9,
+      "sender": "assistant",
+      "content": "I understand that a full recovery is unlikely, but \u201csmall changes\u201d is hard for me to hold on to. Could she open her eyes or move without actually knowing we're there? I need to know whether there\u2019s a realistic possibility she\u2019ll recognize us or communicate in some way.",
+      "voice_metadata": "female voice, tense, worried, seeking clear information"
+    },
+    {
+      "turn": 10,
+      "sender": "student",
+      "content": "There isn't, Rachel, not at the moment. I'm sorry to say this.",
+      "voice_metadata": ""
+    },
+    {
+      "turn": 11,
+      "sender": "assistant",
+      "content": "Okay\u2026 I\u2019m trying to understand. So there isn\u2019t a treatment that can bring back her awareness right now\u2014what about another specialist, a rehabilitation program, or something experimental that families try?",
+      "voice_metadata": "female voice, Tense, subdued, emotionally overwhelmed"
+    }
+  ]
+}

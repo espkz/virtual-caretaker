@@ -1,0 +1,51 @@
+Student: admintest1
+Prompt: Rachel Ellison Scenario 2 v2
+Session ID: 58
+Started: 2026-09-15 16:03:18.288367+00:00
+
+[2026-09-15 16:03:18.292216+00:00] Assistant: Welcome to the virtual patient simulation. Today, you are speaking with Rachel Ellison, the daughter of Margaret Ellison, a 66-year-old woman receiving home hospice care after an irreversible brain injury. Rachel knows the feeding tube is scheduled to be stopped today, but she has urgent questions about the decision, suffering, and morphine before she can proceed. When you're ready, introduce yourself as the hospice nurse.
+
+[2026-09-15 16:03:28.376084+00:00] Student: Hi, It's mike from the hospice team
+
+[2026-09-15 16:03:28.385961+00:00] Assistant: I know why you're here. Daniel told me you're stopping her feeding today. But before you do that, I need someone to answer some questions, because right now it feels like my brother is just giving up on her.
+Voice metadata: female voice, Tense, sleep-deprived, frightened, emotionally strained, direct but not threatening.
+
+[2026-09-15 16:05:10.565766+00:00] Student: OK. Let me sit with you. You feel like Daniel is giving up on her?
+
+[2026-09-15 16:05:14.321989+00:00] Assistant: Thank you for explaining that. He isn’t even here. I’m the one taking care of her. How can he be the person who gets to decide this?
+Voice metadata: female voice, Tense, sleep-deprived, frightened, emotionally strained, direct but not threatening.
+
+[2026-09-15 16:06:20.878398+00:00] Student: Well, your Mom wanted him to be in charge of her care. Sometimes it makes it easier for just one person to be in charge. I know since you are the one taking care of her it can seem unfair.
+
+[2026-09-15 16:06:24.104081+00:00] Assistant: I'm still worried about this. How can stopping her feeding be called comfort care? It sounds like we’re starving her to death.
+Voice metadata: female voice, Tense, sleep-deprived, frightened, emotionally strained, direct but not threatening.
+
+[2026-09-15 16:08:46.653041+00:00] Student: I know it can seem like we are starving her. Sometimes the body doesn't want food at this point. It stresses the system. We also will give her morphine to help with any pain
+
+[2026-09-15 16:08:50.904958+00:00] Assistant: I'm not sure I understand. Could you explain that concern in simpler terms?
+Voice metadata: female voice, Tense, sleep-deprived, frightened, emotionally strained, direct but not threatening.
+
+[2026-09-15 16:10:26.563832+00:00] Student: When the body is dying, food can cause stress because the body can't handle it. We also have morphine to help.
+
+[2026-09-15 16:10:31.089584+00:00] Assistant: I'm still worried about this. Won’t she feel hungry or thirsty?
+Voice metadata: female voice, Tense, sleep-deprived, frightened, emotionally strained, direct but not threatening.
+
+[2026-09-15 16:11:03.235770+00:00] Student: Maybe. We can keep her mouth brushed which helps with thirst. but mostly the morphine will help.
+
+[2026-09-15 16:11:10.782375+00:00] Assistant: I'm still worried about this. She can’t tell me that she is hurting. How am I supposed to know when she needs morphine?
+Voice metadata: female voice, Tense, sleep-deprived, frightened, emotionally strained, direct but not threatening.
+
+[2026-09-15 16:12:38.758985+00:00] Student: I understand that can be hard. If she is breathing heavy or restless that can be a sign she is in pain.
+
+[2026-09-15 16:12:41.643214+00:00] Assistant: I'm still worried about this. Morphine slows breathing. If I give it and she dies afterward, how is that not me killing her?
+Voice metadata: female voice, Tense, sleep-deprived, frightened, emotionally strained, direct but not threatening.
+
+[2026-09-15 16:13:19.928031+00:00] Student: That's a normal concern. You are not killing her. You are being a caring daughter. the morphine just helps the passing
+
+[2026-09-15 16:13:22.875663+00:00] Assistant: I'm not sure I understand. Could you explain that concern in simpler terms?
+Voice metadata: female voice, Tense, sleep-deprived, frightened, emotionally strained, direct but not threatening.
+
+[2026-09-15 16:13:46.388113+00:00] Student: Your mom is dying. The morphine will help her pass without pain.
+
+[2026-09-15 16:13:49.078031+00:00] Assistant: I need a little more time and support before we continue. I'd like to speak with someone from the care team.
+Voice metadata: female voice, Tense, sleep-deprived, frightened, emotionally strained, direct but not threatening.

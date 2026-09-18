@@ -37,7 +37,7 @@
     <tbody>
     {% for prompt in prompts %}
         <tr>
-            <td>{{ prompt.title }}</td>
+            <td>{{ prompt.title }}<br><small>{{ prompt.simulation_mode_label }}</small></td>
             <td>
                 {% if prompt.is_active %}
                     <span class="status-pill active">Active</span>
@@ -48,6 +48,7 @@
             <td>{{ prompt.updated_at }}</td>
             <td>
                 <div class="table-actions">
+                <a class="action-btn" href="{% url 'vip:professor_test_chat' %}?prompt={{ prompt.id }}">Test</a>
                 <a class="action-btn" href="{% url 'vip:edit_prompt' prompt.id %}">Edit</a>
                 <a class="action-btn" href="{% url 'vip:professor_download_prompt_txt' prompt.id %}">Download .txt</a>
                 {% if prompt.is_active %}

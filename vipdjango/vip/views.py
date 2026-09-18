@@ -2,14 +2,14 @@ import os
 import re
 import io
 import csv
-import json
 import logging
 import uuid
+from datetime import timedelta
 from pathlib import Path
 from urllib.parse import urlencode
 
 from django.conf import settings
-from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
+from django.http import HttpResponse, HttpResponseBadRequest, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
@@ -35,12 +35,9 @@ from .conversation_graph import MAX_TURNS
 from .conversation_engine import (
     DEFAULT_INTRODUCTION,
     ConversationEngine,
-    _repeated_answered_question,
-    format_history_content,
     split_dialogue_and_voice,
 )
 from .conversation_scenario import parse_scenario_prompt
-from .voice_timing import VoicePipelineTiming
 
 logger = logging.getLogger(__name__)
 
@@ -68,115 +65,44 @@ def _extract_template_prefix():
     return prompt_template.strip()
 
 
-def _conversation_messages(session_messages):
-    """Convert persisted conversational messages into native LLM message roles."""
-    messages = []
-    for message in session_messages:
-        if message.sender not in {ChatMessage.Sender.STUDENT, ChatMessage.Sender.ASSISTANT}:
-            continue
-        content = message.content
-        if message.sender == ChatMessage.Sender.ASSISTANT:
-            content, _ = split_dialogue_and_voice(content)
-        role = "user" if message.sender == ChatMessage.Sender.STUDENT else "assistant"
-        messages.append({"role": role, "content": format_history_content(role, content)})
-    return messages
-
-
-def _load_api_key_from_txt():
-    # Preferred: environment variable for deployment safety.
+def _load_api_key():
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    if api_key:
-        return api_key
-
-    # Local file fallback (commented out for now).
-    # api_key_path = Path(settings.BASE_DIR).parent / "api_key.txt"
-    # if api_key_path.exists():
-    #     return api_key_path.read_text(encoding="utf-8").strip()
-
-    return ""
-
-
-def _parse_dialogue_and_emotion(text):
-    return split_dialogue_and_voice(text)
+    return api_key
 
 
 def _clean_for_tts(text):
     return re.sub(r"\([^)]*\)", "", text).strip()
 
 
-def _detect_stop_request(message_text):
-    """Use the model for semantic interrupt intent instead of phrase matching."""
-    api_key = _load_api_key_from_txt()
-    if not api_key or not message_text:
-        return False
-    try:
-        from openai import OpenAI
-
-        payload = [
-            {
-                "role": "system",
-                "content": (
-                    "Classify only whether the learner is clearly requesting that the conversation stop now. "
-                    "Return true for an explicit request to end or stop the conversation. Return false when the "
-                    "learner is continuing roleplay, discussing a scenario ending, expressing thanks while asking "
-                    "another question, or otherwise has not clearly requested stopping."
-                ),
-            },
-            {"role": "user", "content": message_text},
-        ]
-        logger.debug("LLM interrupt classifier payload:\n%s", json.dumps(payload, ensure_ascii=False, indent=2))
-        client = OpenAI(api_key=api_key)
-        response = client.responses.create(
-            model="gpt-5-nano",
-            text={
-                "format": {
-                    "type": "json_schema",
-                    "name": "conversation_interrupt",
-                    "schema": {
-                        "type": "object",
-                        "properties": {"stop_requested": {"type": "boolean"}},
-                        "required": ["stop_requested"],
-                        "additionalProperties": False,
-                    },
-                    "strict": True,
-                }
-            },
-            input=payload,
-        )
-        return bool(json.loads(response.output_text or "{}").get("stop_requested"))
-    except Exception:
-        logger.exception("Unable to classify conversation interrupt request")
-        return False
-
-
 def _generate_assistant_response(
     role_text,
     session_messages,
     session=None,
-    timing_callback=None,
 ):
-    api_key = _load_api_key_from_txt()
+    api_key = _load_api_key()
     if not api_key:
-        return "OpenAI API key is not configured on the server yet.", False, {"stage": "error", "reason": "missing_api_key"}
+        raise RuntimeError("OPENAI_API_KEY is not configured")
     engine = ConversationEngine(_extract_template_prefix(), api_key)
     conversation_state = None
     if session is not None:
         conversation_state = {
-            "current_stage": session.conversation_stage,
-            "conversation_stage": session.conversation_stage,
-            "phase": session.conversation_phase,
+            "core_question_state": session.core_question_state,
             "completion_status": session.completion_status,
+            "current_stage": session.conversation_stage,
             "active_objective": session.active_objective,
             "covered_objectives": list(session.covered_objectives or []),
             "unresolved_objectives": list(session.unresolved_objectives or []),
             "recent_topics": list(session.recent_topics or []),
+            "active_topic": session.active_topic,
+            "covered_topics": list(session.covered_topics or []),
+            "unresolved_topics": list(session.unresolved_topics or []),
+            "topic_turn_counts": dict(session.topic_turn_counts or {}),
             "ending_ready": session.ending_ready,
         }
     return engine.respond(
         role_text,
         list(session_messages),
         conversation_state=conversation_state,
-        timing_callback=timing_callback,
     )
 
 
@@ -201,6 +127,16 @@ def _accept_learner_turn(session, user_text, turn_id):
             sender=ChatMessage.Sender.STUDENT,
             turn_id=turn_id,
         ).first()
+        if locked_session.ended_at is not None:
+            return locked_session, "closed", None
+        if locked_session.active_turn_id and (
+            locked_session.active_claimed_at is None
+            or locked_session.active_claimed_at < timezone.now() - timedelta(seconds=90)
+        ):
+            locked_session.active_turn_id = ""
+            locked_session.active_claim_id = ""
+            locked_session.active_claimed_at = None
+            locked_session.save(update_fields=["active_turn_id", "active_claim_id", "active_claimed_at"])
         if existing_student:
             if existing_student.content.strip() != user_text.strip():
                 logger.warning(
@@ -223,7 +159,8 @@ def _accept_learner_turn(session, user_text, turn_id):
             # message instead of inserting a second learner turn.
             locked_session.active_turn_id = turn_id
             locked_session.active_claim_id = uuid.uuid4().hex
-            locked_session.save(update_fields=["active_turn_id", "active_claim_id"])
+            locked_session.active_claimed_at = timezone.now()
+            locked_session.save(update_fields=["active_turn_id", "active_claim_id", "active_claimed_at"])
             return locked_session, "accepted", None
 
         if locked_session.active_turn_id:
@@ -241,7 +178,8 @@ def _accept_learner_turn(session, user_text, turn_id):
         )
         locked_session.active_turn_id = turn_id
         locked_session.active_claim_id = uuid.uuid4().hex
-        locked_session.save(update_fields=["active_turn_id", "active_claim_id"])
+        locked_session.active_claimed_at = timezone.now()
+        locked_session.save(update_fields=["active_turn_id", "active_claim_id", "active_claimed_at"])
         return locked_session, "accepted", None
 
 
@@ -257,83 +195,8 @@ def _release_learner_turn(session, turn_id, claim_id=""):
             return False
         locked_session.active_turn_id = ""
         locked_session.active_claim_id = ""
-        locked_session.save(update_fields=["active_turn_id", "active_claim_id"])
-    return True
-
-
-def _merge_pipeline_timing(existing, incoming):
-    """Merge a later client/TTS report into the stored turn trace.
-
-    The browser reports playback after the complete TTS response is ready.
-    First server marks are retained while new client event names and derived
-    durations are added.
-    """
-    existing = existing if isinstance(existing, dict) else {}
-    incoming = incoming if isinstance(incoming, dict) else {}
-    client_events = dict(existing.get("client_events") or {})
-    client_events.update(incoming.get("client_events") or {})
-    server_events = dict(existing.get("server_events") or {})
-    for name, value in (incoming.get("server_events") or {}).items():
-        server_events.setdefault(name, value)
-
-    timing = VoicePipelineTiming(
-        {
-            "trace_id": incoming.get("trace_id") or existing.get("trace_id"),
-            "events": client_events,
-            "server_events": server_events,
-        }
-    )
-    timing.events.update(server_events)
-    timing.client_events.update(client_events)
-    snapshot = timing.snapshot()
-    if "llm_context" in existing or "llm_context" in incoming:
-        snapshot["llm_context"] = (
-            incoming.get("llm_context")
-            if "llm_context" in incoming
-            else existing.get("llm_context")
-        )
-    return snapshot
-
-
-def _timing_snapshot_for_turn(timing, debug_info):
-    """Include request-size measurements with the persisted voice trace."""
-    snapshot = timing.snapshot()
-    context_measurements = (debug_info or {}).get("llm_context")
-    if isinstance(context_measurements, list):
-        snapshot["llm_context"] = context_measurements
-    return snapshot
-
-
-def _save_message_timing(message_id, timing_snapshot):
-    """Merge a timing snapshot onto one accessible transcript message."""
-    if not message_id or not isinstance(timing_snapshot, dict):
-        return False
-    with transaction.atomic():
-        message = ChatMessage.objects.select_for_update().get(pk=message_id)
-        message.pipeline_timing = _merge_pipeline_timing(message.pipeline_timing, timing_snapshot)
-        message.save(update_fields=["pipeline_timing"])
-    return True
-
-
-def _save_turn_timing(session, turn_id, timing_snapshot):
-    """Attach a turn trace to its assistant row, or its learner row if empty."""
-    if not session or not turn_id or not isinstance(timing_snapshot, dict):
-        return False
-    with transaction.atomic():
-        locked_session = ChatSession.objects.select_for_update().get(pk=session.pk)
-        message = locked_session.messages.select_for_update().filter(
-            sender=ChatMessage.Sender.ASSISTANT,
-            turn_id=turn_id,
-        ).first()
-        if message is None:
-            message = locked_session.messages.select_for_update().filter(
-                sender=ChatMessage.Sender.STUDENT,
-                turn_id=turn_id,
-            ).first()
-        if message is None:
-            return False
-        message.pipeline_timing = _merge_pipeline_timing(message.pipeline_timing, timing_snapshot)
-        message.save(update_fields=["pipeline_timing"])
+        locked_session.active_claimed_at = None
+        locked_session.save(update_fields=["active_turn_id", "active_claim_id", "active_claimed_at"])
     return True
 
 
@@ -345,12 +208,13 @@ def _persist_assistant_response(
     turn_id="",
     cancellation_callback=None,
     claim_id="",
-    timing_snapshot=None,
 ):
     """Commit at most one response, and never commit for a stale turn."""
     with transaction.atomic():
         locked_session = ChatSession.objects.select_for_update().get(pk=session.pk)
         if turn_id:
+            if locked_session.ended_at is not None:
+                return False
             if cancellation_callback and cancellation_callback():
                 logger.info("Ignoring cancelled assistant response session=%s turn=%s", session.pk, turn_id)
                 return False
@@ -378,7 +242,6 @@ def _persist_assistant_response(
                 content=assistant_text,
                 voice_metadata=debug_info.get("voice_metadata", ""),
                 turn_id=turn_id,
-                pipeline_timing=timing_snapshot if isinstance(timing_snapshot, dict) else {},
             )
         locked_session.conversation_stage = debug_info.get("current_stage", locked_session.conversation_stage)
         locked_session.conversation_phase = debug_info.get("phase", locked_session.conversation_phase)
@@ -393,6 +256,16 @@ def _persist_assistant_response(
         recent_topics = debug_info.get("recent_topics")
         if isinstance(recent_topics, list):
             locked_session.recent_topics = recent_topics
+        locked_session.active_topic = debug_info.get("active_topic", locked_session.active_topic)
+        covered_topics = debug_info.get("covered_topics")
+        if isinstance(covered_topics, list):
+            locked_session.covered_topics = covered_topics
+        unresolved_topics = debug_info.get("unresolved_topics")
+        if isinstance(unresolved_topics, list):
+            locked_session.unresolved_topics = unresolved_topics
+        topic_turn_counts = debug_info.get("topic_turn_counts")
+        if isinstance(topic_turn_counts, dict):
+            locked_session.topic_turn_counts = topic_turn_counts
         if "ending_ready" in debug_info:
             locked_session.ending_ready = bool(debug_info["ending_ready"])
         update_fields = [
@@ -403,13 +276,21 @@ def _persist_assistant_response(
             "covered_objectives",
             "unresolved_objectives",
             "recent_topics",
+            "active_topic",
+            "covered_topics",
+            "unresolved_topics",
+            "topic_turn_counts",
             "ending_ready",
         ]
         if turn_id:
             locked_session.active_turn_id = ""
             locked_session.active_claim_id = ""
+            locked_session.active_claimed_at = None
             locked_session.last_completed_turn_id = turn_id
-            update_fields.extend(["active_turn_id", "active_claim_id", "last_completed_turn_id"])
+            update_fields.extend(["active_turn_id", "active_claim_id", "active_claimed_at", "last_completed_turn_id"])
+        if "core_question_state" in debug_info:
+            locked_session.core_question_state = debug_info["core_question_state"]
+            update_fields.append("core_question_state")
         if conversation_complete and locked_session.ended_at is None:
             locked_session.ended_at = timezone.now()
             update_fields.append("ended_at")
@@ -1065,7 +946,7 @@ def _rendered_chat_messages(session, user_label):
         display_content = message.content
         embedded_emotion = ""
         if message.sender == ChatMessage.Sender.ASSISTANT:
-            display_content, embedded_emotion = _parse_dialogue_and_emotion(message.content)
+            display_content, embedded_emotion = split_dialogue_and_voice(message.content)
         rendered.append(
             {
                 "id": message.id,
@@ -1088,6 +969,8 @@ def _chat_dashboard_context(
     user_label,
     force_new,
 ):
+    latest = current_session.messages.order_by("-id").first() if current_session else None
+    pending = latest if latest and latest.sender == ChatMessage.Sender.STUDENT else None
     return {
         "active_prompts": active_prompts,
         "selected_prompt": selected_prompt,
@@ -1096,6 +979,7 @@ def _chat_dashboard_context(
         "rendered_messages": _rendered_chat_messages(current_session, user_label),
         "error_message": error_message,
         "force_new": force_new,
+        "pending_message": pending,
     }
 
 
@@ -1122,6 +1006,10 @@ def _selected_chat_state(request):
             ChatSession.objects.filter(student=request.user).select_related("role_prompt"),
             pk=session_id,
         )
+        if selected_prompt_id and current_session.role_prompt_id != getattr(selected_prompt, "id", None):
+            current_session = sessions.filter(role_prompt=selected_prompt).first()
+        elif current_session.role_prompt and not selected_prompt_id:
+            selected_prompt = current_session.role_prompt
     elif request.GET.get("new") != "1" and selected_prompt:
         current_session = sessions.filter(role_prompt=selected_prompt).first()
 
@@ -1160,7 +1048,7 @@ def _seed_introduction(session):
     if session.messages.filter(sender=ChatMessage.Sender.ASSISTANT).exists():
         return
 
-    scenario = parse_scenario_prompt(session.role_prompt.content)
+    scenario = parse_scenario_prompt(session.scenario_content or session.role_prompt.content)
     introduction = (scenario.introduction or DEFAULT_INTRODUCTION).strip()
     if introduction:
         ChatMessage.objects.create(
@@ -1171,7 +1059,7 @@ def _seed_introduction(session):
 
 
 def _create_chat_session(user, selected_prompt):
-    session = ChatSession.objects.create(student=user, role_prompt=selected_prompt)
+    session = ChatSession.objects.create(student=user, role_prompt=selected_prompt, scenario_content=selected_prompt.content)
     _seed_introduction(session)
     return session
 
@@ -1211,7 +1099,7 @@ def _chat_dashboard(
                 )
                 current_session.ended_at = timezone.now()
                 current_session.save(update_fields=["ended_at"])
-            return redirect(_chat_url(view_name, selected_prompt, new=1))
+            return redirect(_chat_url(view_name, selected_prompt, session=current_session.id) if current_session else _chat_url(view_name, selected_prompt))
 
         if action == "send_message":
             user_text = request.POST.get("message", "").strip()
@@ -1265,6 +1153,8 @@ def _chat_dashboard(
             )
             if turn_status == "pending":
                 error_message = "Please wait for the AI response before sending another message."
+            elif turn_status == "closed":
+                return redirect(_chat_url(view_name, selected_prompt, session=current_session.id))
             elif turn_status == "conflict":
                 error_message = "This turn ID was already used for different message content. Please retry from the chat page."
 
@@ -1286,18 +1176,20 @@ def _chat_dashboard(
             if turn_status == "duplicate":
                 return redirect(_chat_url(view_name, selected_prompt, session=current_session.id))
 
-            normal_timing = VoicePipelineTiming(request.POST.get("voice_timing"))
             try:
                 assistant_text, conversation_complete, debug_info = _generate_assistant_response(
-                    selected_prompt.content,
+                    current_session.scenario_content or selected_prompt.content,
                     current_session.messages.order_by("created_at"),
                     current_session,
-                    timing_callback=normal_timing.mark,
                 )
             except Exception:
                 _release_learner_turn(current_session, turn_id, current_session.active_claim_id)
                 logger.exception("Chat response generation failed session=%s turn=%s", current_session.id, turn_id)
-                raise
+                return render(request, template_name, _chat_dashboard_context(
+                    active_prompts, selected_prompt, sessions, current_session,
+                    "The response could not be generated. Your message is saved. Press Retry response; if this continues, contact your instructor.",
+                    user_label, False,
+                ), status=503)
             _persist_assistant_response(
                 current_session,
                 assistant_text,
@@ -1305,16 +1197,7 @@ def _chat_dashboard(
                 debug_info,
                 turn_id=turn_id,
                 claim_id=current_session.active_claim_id,
-                timing_snapshot=_timing_snapshot_for_turn(normal_timing, debug_info),
             )
-            normal_timing.mark("response_generation_complete")
-            normal_timing.mark("response_complete")
-            _save_turn_timing(
-                current_session,
-                turn_id,
-                _timing_snapshot_for_turn(normal_timing, debug_info),
-            )
-            normal_timing.log("complete")
             logger.debug(
                 "Chat response generated: user=%s session=%s phase=%s complete=%s reason=%s ending_check=%s",
                 request.user.username,
@@ -1330,7 +1213,6 @@ def _chat_dashboard(
                     selected_prompt,
                     session=current_session.id,
                     autoplay=1,
-                    trace=normal_timing.trace_id,
                 )
             )
 
@@ -1359,7 +1241,7 @@ def professor_test_chat(request):
         template_name="vip/professor_test_chat.html",
         view_name="vip:professor_test_chat",
         user_label="Professor",
-        no_prompt_message="No active prompt is available. Activate at least one prompt first.",
+        no_prompt_message="No scenario is available. Create or upload a scenario first.",
         allow_delete_session=True,
     )
 
@@ -1409,24 +1291,6 @@ def student_download_session(request, session_id):
         lines.append(f"[{message.created_at}] {speaker}: {content}")
         if voice_metadata:
             lines.append(f"Voice metadata: {voice_metadata}")
-        timing_snapshot = message.pipeline_timing or {}
-        if timing_snapshot:
-            lines.append("Voice pipeline timing:")
-            lines.append(f"Trace ID: {timing_snapshot.get('trace_id', '')}")
-            for section in ("client_events", "server_events"):
-                events = timing_snapshot.get(section) or {}
-                if events:
-                    lines.append(f"{section.replace('_', ' ').title()}:")
-                    for name, value in events.items():
-                        lines.append(f"  {name}: {json.dumps(value, ensure_ascii=False, sort_keys=True)}")
-            durations = timing_snapshot.get("durations_ms") or {}
-            if durations:
-                lines.append(f"Durations (ms): {json.dumps(durations, ensure_ascii=False, sort_keys=True)}")
-            llm_context = timing_snapshot.get("llm_context") or []
-            if llm_context:
-                lines.append("LLM context measurements:")
-                for measurement in llm_context:
-                    lines.append(f"  {json.dumps(measurement, ensure_ascii=False, sort_keys=True)}")
         lines.append("")
 
     response = HttpResponse("\n".join(lines), content_type="text/plain")
@@ -1450,141 +1314,28 @@ def student_message_tts(request, message_id):
     dialogue, embedded_emotion = split_dialogue_and_voice(message.content)
     emotion = getattr(message, "voice_metadata", "") or embedded_emotion
     use_emotion_voice = request.GET.get("emotion", "1") != "0"
-    if use_emotion_voice and not emotion:
+    if not emotion:
         return HttpResponseBadRequest("Audio is not available for this text-only assistant message.")
 
-    api_key = _load_api_key_from_txt()
+    api_key = _load_api_key()
     if not api_key:
         return HttpResponseBadRequest("API key is not configured.")
 
-    timing = VoicePipelineTiming(trace_id=request.GET.get("trace"))
-    timing.mark("tts_text_first_usable")
-    timing.mark("tts_request_start")
-
     try:
-        if use_emotion_voice:
-            from openai import OpenAI
+        from .speech import SpeechStream
 
-            voice = "coral"
-            if re.search(r"\bmale voice\b", emotion.lower()):
-                voice = "onyx"
-
-            tts_client = OpenAI(api_key=api_key)
-            response = tts_client.audio.speech.create(
-                model="gpt-4o-mini-tts",
-                voice=voice,
-                input=dialogue or "No spoken dialogue.",
-                instructions=emotion or "Speak naturally and clearly.",
-            )
-            audio = response.read()
-            timing.mark("tts_first_audio_data")
-            timing.mark("tts_first_audio_chunk")
-            timing.mark("tts_completion")
-            timing.log("complete")
-            _save_message_timing(message.id, timing.snapshot())
-            result = HttpResponse(audio, content_type="audio/mpeg")
-            result["Cache-Control"] = "no-store"
-            return result
-
-        from gtts import gTTS
-
-        clean_text = _clean_for_tts(dialogue)
-        audio_buffer = io.BytesIO()
-        tts = gTTS(text=clean_text or "No content", lang="en")
-        tts.write_to_fp(audio_buffer)
-        audio_buffer.seek(0)
-        audio = audio_buffer.read()
-        timing.mark("tts_first_audio_data")
-        timing.mark("tts_first_audio_chunk")
-        timing.mark("tts_completion")
-        timing.log("complete")
-        _save_message_timing(message.id, timing.snapshot())
-        result = HttpResponse(audio, content_type="audio/mpeg")
+        stream = SpeechStream(
+            api_key,
+            model=os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
+            voice="onyx" if re.search(r"\bmale voice\b", emotion.lower()) else "coral",
+            input=dialogue or "No spoken dialogue.",
+            instructions=emotion if use_emotion_voice else "Speak naturally and clearly.",
+            response_format="mp3",
+        )
+        result = StreamingHttpResponse(stream, content_type="audio/mpeg")
         result["Cache-Control"] = "no-store"
+        result["X-Accel-Buffering"] = "no"
         return result
-    except Exception as exc:
-        timing.log("error")
-        return HttpResponseBadRequest(f"TTS error: {exc}")
-
-
-def _timing_message_for_params(request, params):
-    """Resolve the transcript row allowed to receive a TTS timing trace."""
-    message_id = params.get("message_id")
-    if message_id:
-        filters = {
-            "pk": message_id,
-            "sender": ChatMessage.Sender.ASSISTANT,
-            "session__student": request.user,
-        }
-        if params.get("session_id"):
-            filters["session_id"] = params.get("session_id")
-        return get_object_or_404(ChatMessage.objects.select_related("session"), **filters)
-
-    session_id = params.get("session_id")
-    turn_id = params.get("turn_id")
-    if session_id and turn_id:
-        message = ChatMessage.objects.filter(
-            session_id=session_id,
-            session__student=request.user,
-            sender=ChatMessage.Sender.ASSISTANT,
-            turn_id=turn_id,
-        ).first()
-        if message is None:
-            message = ChatMessage.objects.filter(
-                session_id=session_id,
-                session__student=request.user,
-                sender=ChatMessage.Sender.STUDENT,
-                turn_id=turn_id,
-            ).first()
-        return message
-    return None
-
-
-@login_required
-@require_POST
-def student_voice_timing(request):
-    """Receive and persist the browser's final marks for the conversation log."""
-    if not (_is_student(request.user) or _is_professor(request.user)):
-        return redirect("vip:home")
-    payload = request.POST.get("timing")
-    timing = VoicePipelineTiming(payload)
-    timing.mark("client_report_received")
-    timing.log("client_complete")
-    message = None
-    message_id = request.POST.get("message_id")
-    if message_id:
-        filters = {
-            "pk": message_id,
-            "sender": ChatMessage.Sender.ASSISTANT,
-            "session__student": request.user,
-        }
-        if request.POST.get("session_id"):
-            filters["session_id"] = request.POST.get("session_id")
-        message = ChatMessage.objects.filter(**filters).first()
-    if message is None:
-        session_id = request.POST.get("session_id")
-        turn_id = request.POST.get("turn_id")
-        if session_id and turn_id:
-            message = ChatMessage.objects.filter(
-                session_id=session_id,
-                session__student=request.user,
-                sender=ChatMessage.Sender.ASSISTANT,
-                turn_id=turn_id,
-            ).first()
-            if message is None:
-                message = ChatMessage.objects.filter(
-                    session_id=session_id,
-                    session__student=request.user,
-                    sender=ChatMessage.Sender.STUDENT,
-                    turn_id=turn_id,
-                ).first()
-    if message is None:
-        # A trace can arrive without identifiers from an older browser page.
-        # Search only the current user's messages so this fallback cannot
-        # update another user's conversation.
-        for candidate in ChatMessage.objects.filter(session__student=request.user).order_by("-created_at"):
-            if (candidate.pipeline_timing or {}).get("trace_id") == timing.trace_id:
-                message = candidate
-                break
-    persisted = _save_message_timing(message.id, timing.snapshot()) if message else False
-    return JsonResponse({"ok": True, "trace_id": timing.trace_id, "persisted": persisted})
+    except Exception:
+        logger.exception("Speech generation failed message=%s", message.id)
+        return HttpResponse("Voice is temporarily unavailable. You can continue using text.", status=503)

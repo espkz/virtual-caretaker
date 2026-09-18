@@ -1,4 +1,5 @@
 {% extends "vip/base.html" %}
+{% load static %}
 {% block title %}Home{% endblock %}
 {% block content %}
 <header class="page-header">
@@ -70,7 +71,8 @@
                 {% endif %}
             </h2>
 
-            <div class="chat-window">
+            <p class="muted">Practice with an AI simulated character. Type your reply, or use the microphone and review your words before sending. You can close the conversation at any time.</p>
+            <div class="chat-window" role="log" aria-label="Conversation">
                 {% if rendered_messages %}
                     {% for message in rendered_messages %}
                     <article class="chat-message {{ message.sender }}">
@@ -112,8 +114,7 @@
             <form class="message-form" method="post" action="{% url 'vip:student_dashboard' %}">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="send_message">
-                <input type="hidden" id="voice-timing" name="voice_timing" value="">
-                <input type="hidden" id="voice-turn-id" name="turn_id" value="">
+                <input type="hidden" id="voice-turn-id" name="turn_id" value="{{ pending_message.turn_id|default:'' }}">
                 {% if selected_prompt %}
                 <input type="hidden" name="prompt_id" value="{{ selected_prompt.id }}">
                 {% endif %}
@@ -128,14 +129,15 @@
                 {% endif %}
                 <label class="tts-toggle">
                     <input type="checkbox" id="emotion-voice-toggle" checked>
-                    Enable emotion voice.
+                    Use expressive AI voice.
                 </label>
-                <div class="voice-actions"></div>
-                <div id="stt-status" class="voice-status"></div>
+                <label class="tts-toggle"><input type="checkbox" id="autoplay-voice-toggle"> Play responses aloud automatically</label>
+                {% if pending_message %}<p>Your last message is saved. Retry its response before sending another message.</p>{% endif %}
+                <div id="stt-status" class="voice-status" role="status" aria-live="polite"></div>
                 <div class="compose-row">
-                    <textarea id="student-message-input" name="message" placeholder="Type your message here..." required></textarea>
-                    <button type="submit" class="send-button-inline" id="send-message-btn">Send</button>
-                    <button type="button" id="stt-toggle" class="mic-button" aria-label="Toggle microphone">🎤</button>
+                    <textarea id="student-message-input" name="message" aria-label="Your response" placeholder="Type your message here..." required {% if pending_message %}readonly{% endif %}>{{ pending_message.content|default:'' }}</textarea>
+                    <button type="submit" class="send-button-inline" id="send-message-btn">{% if pending_message %}Retry response{% else %}Send{% endif %}</button>
+                    <button type="button" id="stt-toggle" class="mic-button" aria-label="Toggle microphone">Mic</button>
                 </div>
                 <div class="row-actions">
                     {% if current_session %}
@@ -154,350 +156,5 @@
     </section>
 </div>
 
-<script>
-    (function () {
-        const chatWindow = document.querySelector(".chat-window");
-        if (chatWindow) {
-            chatWindow.scrollTop = chatWindow.scrollHeight;
-        }
-
-        const textarea = document.getElementById("student-message-input");
-        const messageForm = document.querySelector("form.message-form");
-        const sendMessageBtn = document.getElementById("send-message-btn");
-        const micToggleBtn = document.getElementById("stt-toggle");
-        const status = document.getElementById("stt-status");
-        const voiceTimingInput = document.getElementById("voice-timing");
-        const voiceTurnInput = document.getElementById("voice-turn-id");
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const pageTrace = new URLSearchParams(window.location.search).get("trace");
-        const currentSessionId = "{% if current_session %}{{ current_session.id }}{% endif %}";
-        const voiceTiming = {
-            trace_id: pageTrace || ((window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now())),
-            events: {}
-        };
-        const firstTimingMarks = new Set([
-            "recording_start", "recording_end", "speech_end",
-            "stt_start", "stt_completion", "stt_finalization",
-            "gpt_request_start", "gpt_first_output", "tts_text_first_usable",
-            "response_display", "response_generation_complete", "response_complete",
-            "first_tts_audio_data", "tts_first_audio_chunk", "audio_playback_start",
-            "tts_request_start", "client_pipeline_complete"
-        ]);
-        function normalizeFinalTranscript(value) {
-            let text = (value || "").replace(/\s+/g, " ").trim();
-            if (!text) {
-                return "";
-            }
-            text = text.charAt(0).toUpperCase() + text.slice(1);
-            const secondQuestion = text.search(
-                /\s+(what|when|where|why|how|who)\s+(have|has|did|do|does|are|is|was|were|can|could|would|will)\b/i
-            );
-            if (/^(can|could|would|will|should|is|are|do|does|did)\b/i.test(text) && secondQuestion > 0) {
-                const first = text.slice(0, secondQuestion).replace(/[,.!?]+$/, "") + "?";
-                const second = text.slice(secondQuestion + 1);
-                text = first + " " + second.charAt(0).toUpperCase() + second.slice(1);
-            }
-            if (!/[.!?]$/.test(text)) {
-                text += /^(can|could|would|will|should|is|are|do|does|did|what|when|where|why|how|who)\b/i.test(text) ? "?" : ".";
-            }
-            return text;
-        }
-        function ensureTurnId() {
-            if (voiceTurnInput && !voiceTurnInput.value) {
-                voiceTurnInput.value = (window.crypto && crypto.randomUUID)
-                    ? crypto.randomUUID()
-                    : String(Date.now()) + "-" + Math.random().toString(16).slice(2);
-            }
-            return voiceTurnInput ? voiceTurnInput.value : "";
-        }
-        function browserEpochMs() {
-            return (performance.timeOrigin || (Date.now() - performance.now())) + performance.now();
-        }
-        function markVoiceTiming(name) {
-            if (firstTimingMarks.has(name) && voiceTiming.events[name] !== undefined) {
-                return;
-            }
-            voiceTiming.events[name] = browserEpochMs();
-        }
-        function flushVoiceTiming() {
-            if (voiceTimingInput) {
-                voiceTimingInput.value = JSON.stringify(voiceTiming);
-            }
-        }
-        function reportVoiceTiming(messageId, turnId, sessionId) {
-            const timingReport = new URLSearchParams();
-            timingReport.set("timing", JSON.stringify(voiceTiming));
-            if (sessionId || currentSessionId) {
-                timingReport.set("session_id", sessionId || currentSessionId);
-            }
-            if (messageId) {
-                timingReport.set("message_id", messageId);
-            }
-            if (turnId) {
-                timingReport.set("turn_id", turnId);
-            }
-            fetch(voiceTimingUrl, {
-                method: "POST",
-                headers: {"X-CSRFToken": csrfToken()},
-                body: timingReport,
-                keepalive: true
-            }).catch(function () {});
-        }
-        if (pageTrace) {
-            markVoiceTiming("response_display");
-        }
-
-        let recognition = null;
-        let isListening = false;
-        let shouldAutoSubmit = false;
-        if (SpeechRecognition && textarea && micToggleBtn && status && messageForm && sendMessageBtn) {
-            recognition = new SpeechRecognition();
-            recognition.lang = "en-US";
-            recognition.interimResults = true;
-            recognition.continuous = true;
-
-            let committedTranscript = "";
-            isListening = false;
-            shouldAutoSubmit = false;
-            recognition.onstart = function () {
-                markVoiceTiming("recording_start");
-                markVoiceTiming("stt_start");
-                committedTranscript = textarea.value ? textarea.value.trim() : "";
-                if (committedTranscript) {
-                    committedTranscript += " ";
-                }
-                status.textContent = "Listening...";
-                isListening = true;
-                micToggleBtn.classList.add("listening");
-                micToggleBtn.textContent = "⏹";
-            };
-            recognition.onresult = function (event) {
-                let interim = "";
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    const transcript = event.results[i][0].transcript;
-                    if (event.results[i].isFinal) {
-                        committedTranscript += transcript.trim() + " ";
-                    } else {
-                        interim += transcript;
-                    }
-                }
-                textarea.value = (committedTranscript + interim).trim();
-            };
-            recognition.onerror = function (event) {
-                status.textContent = "Speech error: " + event.error;
-            };
-            recognition.onend = function () {
-                markVoiceTiming("recording_end");
-                // SpeechRecognition has delivered its final result by
-                // onend; this is the complete-transcript boundary used for
-                // the end-of-speech latency measurement.
-                markVoiceTiming("stt_completion");
-                markVoiceTiming("stt_finalization");
-                if (status.textContent === "Listening...") {
-                    status.textContent = "Microphone stopped.";
-                }
-                isListening = false;
-                micToggleBtn.classList.remove("listening");
-                micToggleBtn.textContent = "🎤";
-                if (shouldAutoSubmit) {
-                    shouldAutoSubmit = false;
-                    textarea.value = normalizeFinalTranscript(committedTranscript || textarea.value);
-                    if (textarea.value.trim()) {
-                        messageForm.requestSubmit(sendMessageBtn);
-                    }
-                }
-            };
-
-            micToggleBtn.addEventListener("click", function () {
-                if (!isListening) {
-                    shouldAutoSubmit = false;
-                    recognition.start();
-                    return;
-                }
-                shouldAutoSubmit = true;
-                markVoiceTiming("speech_end");
-                recognition.stop();
-            });
-
-        } else if (status) {
-            status.textContent = "Speech-to-text is not supported in this browser.";
-        }
-
-        if (textarea && messageForm && sendMessageBtn) {
-            textarea.addEventListener("keydown", function (event) {
-                if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    if (textarea.value.trim()) {
-                        messageForm.requestSubmit(sendMessageBtn);
-                    }
-                }
-            });
-
-            messageForm.addEventListener("submit", function (event) {
-                const submitter = event.submitter;
-                const actionValue = submitter && submitter.value ? submitter.value : "send_message";
-                if (actionValue !== "send_message") {
-                    return;
-                }
-                if (isListening && recognition) {
-                    event.preventDefault();
-                    shouldAutoSubmit = true;
-                    markVoiceTiming("speech_end");
-                    recognition.stop();
-                    return;
-                }
-                if (!textarea.value.trim()) {
-                    event.preventDefault();
-                    return;
-                }
-                ensureTurnId();
-                flushVoiceTiming();
-                if (messageForm.dataset.sending === "1") {
-                    event.preventDefault();
-                    return;
-                }
-                messageForm.dataset.sending = "1";
-                const sendBtn = messageForm.querySelector(".send-button-inline");
-                if (sendBtn) {
-                    sendBtn.disabled = true;
-                    sendBtn.textContent = "Sending...";
-                }
-                if (micToggleBtn) {
-                    micToggleBtn.disabled = true;
-                }
-            });
-        }
-
-        const emotionToggle = document.getElementById("emotion-voice-toggle");
-        const storedEmotion = localStorage.getItem("emotion_voice_enabled");
-        if (emotionToggle && storedEmotion !== null) {
-            emotionToggle.checked = storedEmotion === "1";
-        }
-        if (emotionToggle) {
-            emotionToggle.addEventListener("change", function () {
-                localStorage.setItem("emotion_voice_enabled", emotionToggle.checked ? "1" : "0");
-            });
-        }
-        const voiceTimingUrl = "{% url 'vip:student_voice_timing' %}";
-        const ttsButtons = document.querySelectorAll(".tts-button");
-        const audioRequests = new WeakMap();
-        function stopAllOtherAudio(exceptAudio) {
-            document.querySelectorAll(".message-audio-controls audio").forEach(function (audio) {
-                if (audio !== exceptAudio) {
-                    audio.pause();
-                    audio.currentTime = 0;
-                    audio.removeAttribute("src");
-                    audio.load();
-                }
-            });
-        }
-
-        async function playTTS(btn, isAutoplay = false) {
-            const url = btn.dataset.ttsUrl;
-            const emotionFlag = emotionToggle && emotionToggle.checked ? "1" : "0";
-            const messageCard = btn.closest(".chat-message");
-            const audioWrap = messageCard ? messageCard.querySelector(".message-audio-controls") : null;
-            const audioPlayer = audioWrap ? audioWrap.querySelector("audio") : null;
-            const audioStatus = audioWrap ? audioWrap.querySelector(".audio-status") : null;
-
-            if (!audioPlayer) {
-                return;
-            }
-
-            const previousRequest = audioRequests.get(audioPlayer);
-            const requestState = {
-                generation: (previousRequest ? previousRequest.generation : 0) + 1,
-            };
-            audioRequests.set(audioPlayer, requestState);
-            try {
-                if (audioStatus) {
-                    audioStatus.textContent = "Generating voice...";
-                }
-                markVoiceTiming("tts_text_first_usable");
-                markVoiceTiming("tts_request_start");
-                const audioUrl = url + "?emotion=" + emotionFlag + "&trace=" + encodeURIComponent(voiceTiming.trace_id);
-                if (audioRequests.get(audioPlayer) !== requestState) {
-                    return;
-                }
-                stopAllOtherAudio(audioPlayer);
-                audioPlayer.pause();
-                audioPlayer.currentTime = 0;
-                audioPlayer.src = audioUrl;
-                audioPlayer.load();
-                if (audioStatus) {
-                    audioStatus.textContent = "Voice ready. Playing...";
-                }
-                audioPlayer.addEventListener("playing", function () {
-                    markVoiceTiming("audio_playback_start");
-                    reportVoiceTiming(btn.dataset.messageId, "");
-                }, {once: true});
-                await audioPlayer.play();
-            } catch (err) {
-                if (audioRequests.get(audioPlayer) !== requestState) {
-                    return;
-                }
-                if (audioStatus) {
-                    if (isAutoplay) {
-                        audioStatus.textContent = "Autoplay blocked or delayed. Press Play on the audio bar.";
-                    } else {
-                        audioStatus.textContent = err.message || "TTS failed.";
-                    }
-                } else {
-                    alert(err.message || "TTS failed.");
-                }
-            } finally {
-                // The audio element owns the completed request. The generation
-                // guard prevents a stale play call from changing its status.
-            }
-        }
-
-        ttsButtons.forEach(function (btn) {
-            btn.addEventListener("click", async function () {
-                await playTTS(btn);
-            });
-        });
-
-        document.querySelectorAll(".message-audio-controls").forEach(function (wrap) {
-            const audio = wrap.querySelector("audio");
-            const statusText = wrap.querySelector(".audio-status");
-            const stopBtn = wrap.querySelector(".tts-stop");
-            if (!audio) {
-                return;
-            }
-
-            audio.addEventListener("pause", function () {
-                if (audio.currentTime > 0 && !audio.ended && statusText) {
-                    statusText.textContent = "Paused.";
-                }
-            });
-            audio.addEventListener("ended", function () {
-                if (statusText) {
-                    statusText.textContent = "Finished.";
-                }
-            });
-
-            if (stopBtn) {
-                stopBtn.addEventListener("click", function () {
-                    audioRequests.delete(audio);
-                    audio.pause();
-                    audio.currentTime = 0;
-                    audio.removeAttribute("src");
-                    audio.load();
-                    if (statusText) {
-                        statusText.textContent = "Stopped.";
-                    }
-                });
-            }
-        });
-
-        const params = new URLSearchParams(window.location.search);
-        if (params.get("autoplay") === "1" && ttsButtons.length > 0) {
-            playTTS(ttsButtons[ttsButtons.length - 1], true);
-            params.delete("autoplay");
-            const newQuery = params.toString();
-            const newUrl = newQuery ? window.location.pathname + "?" + newQuery : window.location.pathname;
-            window.history.replaceState({}, "", newUrl);
-        }
-    })();
-</script>
+<script src="{% static 'vip/chat.js' %}" defer></script>
 {% endblock %}

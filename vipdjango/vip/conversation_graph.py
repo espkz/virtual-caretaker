@@ -3,10 +3,9 @@ from typing import Any, Callable, TypedDict
 from langgraph.graph import END, StateGraph
 
 
-TARGET_TURNS = 20
-# A safety cap is still useful, but it is deliberately separate from the
-# approximate target. Reaching TARGET_TURNS must never complete a scenario.
-MAX_TURNS = TARGET_TURNS + 4
+TARGET_TURNS = 25
+# ConversationEngine emits a character-side pause on the final allowed turn.
+MAX_TURNS = 25
 _STAGE_ORDER = {"beginning": 0, "middle": 1, "ending": 2}
 
 
@@ -17,29 +16,24 @@ class ConversationState(TypedDict, total=False):
     covered_objectives: list[str]
     unresolved_objectives: list[str]
     recent_topics: list[str]
+    active_topic: str
+    covered_topics: list[str]
+    unresolved_topics: list[str]
+    topic_turn_counts: dict[str, int]
+    topic_progress_ready: bool
     ending_ready: bool
     current_turn: int
     target_turns: int
     max_turns: int
     turns_remaining: int
-    hard_limit_reached: bool
     current_stage: str
     stage_transition_ready: bool
     phase: str
-    conversation_stage: str
     response: str
     voice_metadata: str
     completion_status: bool
     complete: bool
     interrupt_requested: bool
-    introduction_emitted: bool
-    protocol_emitted: bool
-    # Runtime-only hook used for timing diagnostics. It is deliberately not
-    # persisted as conversation state.
-    timing_callback: Callable[[str], None]
-    # Per-request diagnostics; kept in memory and returned in debug_info, but
-    # not carried between learner turns as conversation policy.
-    context_measurements: list[dict[str, Any]]
     debug_info: dict[str, Any]
 
 
@@ -98,15 +92,11 @@ def build_conversation_graph(response_fn: ResponseFn):
             "target_turns": target_turns,
             "max_turns": max_turns,
             "turns_remaining": max(0, max_turns - current_turn),
-            "hard_limit_reached": current_turn >= max_turns,
             "current_stage": state.get("current_stage", "beginning"),
             "stage_transition_ready": state.get("stage_transition_ready", False),
             "phase": _phase_for_turn(current_turn),
-            "conversation_stage": state.get("conversation_stage", "normal"),
             "completion_status": state.get("completion_status", False),
             "interrupt_requested": state.get("interrupt_requested", False),
-            "introduction_emitted": state.get("introduction_emitted", False),
-            "protocol_emitted": state.get("protocol_emitted", False),
         }
 
     def generate(state: ConversationState) -> ConversationState:
@@ -133,7 +123,6 @@ def build_conversation_graph(response_fn: ResponseFn):
             "response": response,
             "voice_metadata": voice,
             "current_stage": stage or state["current_stage"],
-            "conversation_stage": stage or state["current_stage"],
             "stage_transition_ready": transition_ready,
             "completion_status": complete,
             "complete": complete,
@@ -145,6 +134,11 @@ def build_conversation_graph(response_fn: ResponseFn):
             "covered_objectives",
             "unresolved_objectives",
             "recent_topics",
+            "active_topic",
+            "covered_topics",
+            "unresolved_topics",
+            "topic_turn_counts",
+            "topic_progress_ready",
             "ending_ready",
         ):
             if field in debug_info:

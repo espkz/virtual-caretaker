@@ -18,6 +18,15 @@ class ScenarioObjective:
 
 
 @dataclass(frozen=True)
+class ScenarioTopic:
+    """A concrete conversational concern nested under the scenario guidance."""
+
+    id: str
+    title: str
+    possible_expressions: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Scenario:
     character: str
     learner: str
@@ -35,6 +44,8 @@ class Scenario:
     end_of_conversation_cues: str
     objectives: tuple[ScenarioObjective, ...] = ()
     background_context: str = ""
+    topics: tuple[ScenarioTopic, ...] = ()
+    simulation_mode: str = "roleplay"
 
     def to_state(self):
         state = asdict(self)
@@ -49,6 +60,16 @@ class Scenario:
             if isinstance(objective, ScenarioObjective)
             else ScenarioObjective(**objective)
             for objective in values.get("objectives", ())
+        )
+        values["topics"] = tuple(
+            topic
+            if isinstance(topic, ScenarioTopic)
+            else ScenarioTopic(
+                id=topic.get("id", ""),
+                title=topic.get("title", ""),
+                possible_expressions=tuple(topic.get("possible_expressions", ())),
+            )
+            for topic in values.get("topics", ())
         )
         return cls(**values)
 
@@ -66,7 +87,9 @@ def parse_scenario_prompt(role_text: str) -> Scenario:
     if gender not in {"male", "female"}:
         gender = "female"
     voice_style = section(["voice style", "voice instructions"]) or "speak naturally and clearly"
+    middle = section(["middle", "conversation progression: middle"])
     return Scenario(
+        simulation_mode=section(["simulation mode"]).lower() or "roleplay",
         character=section(["role", "role summary", "character"]) or role_text.strip(),
         background_context=section(["background and context", "background", "context"]),
         learner=section(["learner role", "user role"]) or DEFAULT_LEARNER_ROLE,
@@ -75,7 +98,7 @@ def parse_scenario_prompt(role_text: str) -> Scenario:
         introduction=section(["introduction", "introduction: greeting"]),
         opening_line=section(["opening line"]),
         beginning=section(["beginning", "conversation progression: beginning"]),
-        middle=section(["middle", "conversation progression: middle"]),
+        middle=middle,
         ending=section(["ending", "end", "conversation progression: end", "conversation progression: ending"]),
         closing=section(["closing", "final response"]),
         meta=section(["meta instructions", "meta instruction", "meta-instructions", "notes"]),
@@ -95,6 +118,7 @@ def parse_scenario_prompt(role_text: str) -> Scenario:
         objectives=parse_scenario_objectives(
             section(["conversation objectives", "conversation goals", "objectives", "goals"])
         ),
+        topics=parse_scenario_topics(middle),
     )
 
 
@@ -176,4 +200,66 @@ def parse_scenario_objectives(objectives_text: str) -> tuple[ScenarioObjective, 
         _parse_objective_block(title, block_lines, used_ids, index)
         for index, (title, block_lines) in enumerate(blocks, start=1)
         if title.strip()
+    )
+
+
+_TOPIC_HEADING_RE = re.compile(r"^\s*-\s+(.+?)\s*$")
+_TOPIC_EXAMPLE_RE = re.compile(r"^\s+(?:\d+[.)]|[-*+])\s+(.+?)\s*$")
+
+
+def _topic_id(title, used_ids, index):
+    value = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    value = value or f"topic-{index}"
+    candidate = value
+    suffix = 2
+    while candidate in used_ids:
+        candidate = f"{value}-{suffix}"
+        suffix += 1
+    used_ids.add(candidate)
+    return candidate
+
+
+def parse_scenario_topics(middle_text: str) -> tuple[ScenarioTopic, ...]:
+    """Extract concrete topic clusters from the existing Middle guidance.
+
+    New prompts commonly use a top-level bullet for a topic and indented
+    numbered examples beneath it. Older prompts often use one bullet per
+    concern. Supporting both formats gives the application an explicit
+    progress ledger without requiring a prompt migration or a rigid script.
+    """
+    blocks = []
+    current_title = ""
+    current_examples = []
+
+    def flush():
+        nonlocal current_title, current_examples
+        if current_title.strip():
+            blocks.append((current_title.strip(), tuple(current_examples)))
+        current_title = ""
+        current_examples = []
+
+    for line in (middle_text or "").splitlines():
+        heading = _TOPIC_HEADING_RE.match(line)
+        if heading and not line.startswith((" ", "\t")):
+            flush()
+            current_title = heading.group(1).strip()
+            continue
+        if current_title:
+            example = _TOPIC_EXAMPLE_RE.match(line)
+            if example:
+                current_examples.append(example.group(1).strip())
+
+    flush()
+    used_ids = set()
+    return tuple(
+        ScenarioTopic(
+            id=_topic_id(title, used_ids, index),
+            title=title,
+            possible_expressions=tuple(
+                example.strip().strip('"“”')
+                for example in examples
+                if example.strip()
+            ),
+        )
+        for index, (title, examples) in enumerate(blocks, start=1)
     )

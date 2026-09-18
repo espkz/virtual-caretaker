@@ -11,10 +11,12 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from dotenv import load_dotenv
 
 HERE = Path(__file__).resolve()
-APP_ROOT = HERE.parents[2]
-REPO_ROOT = HERE.parents[3]
+REPO_ROOT = HERE.parents[1]
+APP_ROOT = REPO_ROOT / "vipdjango"
+load_dotenv(REPO_ROOT / ".env")
 sys.path.insert(0, str(APP_ROOT))
 
 from vip.conversation_engine import ConversationEngine, format_voice_metadata  # noqa: E402
@@ -51,7 +53,7 @@ def choose_scenario(files, input_fn=input, output_fn=print):
         raise ValueError("Choose one of the listed scenario numbers.") from exc
 
 
-def transcript_payload(scenario_path, role_text, messages, debug, saved_at=None):
+def transcript_payload(scenario_path, messages, debug, saved_at=None):
     return {
         "scenario": scenario_path.stem,
         "scenario_file": str(scenario_path),
@@ -73,11 +75,11 @@ def transcript_payload(scenario_path, role_text, messages, debug, saved_at=None)
     }
 
 
-def save_transcript(directory, scenario_path, role_text, messages, debug):
+def save_transcript(directory, scenario_path, messages, debug):
     directory.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     target = directory / f"{scenario_path.stem}_{stamp}.json"
-    target.write_text(json.dumps(transcript_payload(scenario_path, role_text, messages, debug), indent=2), encoding="utf-8")
+    target.write_text(json.dumps(transcript_payload(scenario_path, messages, debug), indent=2), encoding="utf-8")
     return target
 
 
@@ -100,7 +102,7 @@ def run(args, input_fn=input, output_fn=print, engine=None):
 
     def save():
         nonlocal saved
-        path = save_transcript(Path(args.output_dir), scenario_path, role_text, messages, debug)
+        path = save_transcript(Path(args.output_dir), scenario_path, messages, debug)
         saved = True
         output_fn(f"Saved transcript: {path}")
         return path
@@ -136,7 +138,13 @@ def run(args, input_fn=input, output_fn=print, engine=None):
         if not learner:
             continue
         messages.append(Message("student", learner))
-        character, complete, info = engine.respond(role_text, messages)
+        saved = False
+        try:
+            character, complete, info = engine.respond(role_text, messages, conversation_state=debug)
+        except Exception as exc:
+            messages.pop()
+            output_fn(f"Response unavailable ({type(exc).__name__}). Please try your reply again.")
+            continue
         debug.update(info or {}, completion_status=complete)
         if args.verbose:
             output_fn(json.dumps({"history": [m.__dict__ for m in messages], "debug": debug}, indent=2, default=str))
